@@ -38,13 +38,43 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
   const [adjustReason, setAdjustReason] = useState('')
   const [isAdjusting, setIsAdjusting] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>('')
+  const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loadingTransactions, setLoadingTransactions] = useState(false)
   
   const service = SupabaseGiftCardService.getInstance()
   const cardRef = useRef<HTMLDivElement>(null)
-  const code = service.deobfuscateCode(giftCard.code)
+  
+  // Estado local para la tarjeta que se actualiza en tiempo real
+  const [currentGiftCard, setCurrentGiftCard] = useState<GiftCard>(giftCard)
+  
+  const code = service.deobfuscateCode(currentGiftCard.code)
+
+  // Sincronizar con el prop cuando cambie
+  useEffect(() => {
+    setCurrentGiftCard(giftCard)
+  }, [giftCard])
+
+  // Función para refrescar los datos de la tarjeta
+  const refreshGiftCard = async () => {
+    try {
+      console.log('Refreshing gift card data for ID:', currentGiftCard.id)
+      const updatedCard = await service.getGiftCardById(currentGiftCard.id)
+      if (updatedCard) {
+        console.log('Card refreshed successfully:', {
+          oldAmount: currentGiftCard.currentAmount,
+          newAmount: updatedCard.currentAmount,
+          oldStatus: currentGiftCard.isActive,
+          newStatus: updatedCard.isActive
+        })
+        setCurrentGiftCard(updatedCard)
+      } else {
+        console.error('Failed to refresh card - no data returned')
+      }
+    } catch (error) {
+      console.error('Error refreshing gift card:', error)
+    }
+  }
 
   // Prevenir scroll del body y auto-scroll al modal
   useEffect(() => {
@@ -81,9 +111,9 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
     const generateQR = async () => {
       try {
         const qrData = {
-          cardId: giftCard.id,
+          cardId: currentGiftCard.id,
           code: code,
-          amount: giftCard.currentAmount,
+          amount: currentGiftCard.currentAmount,
           timestamp: Date.now()
         }
         const qrUrl = await QRCode.toDataURL(JSON.stringify(qrData), {
@@ -94,20 +124,20 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
             light: '#FFFFFF'
           }
         })
-        setQrCodeUrl(qrUrl)
+        setQrDataUrl(qrUrl)
       } catch (error) {
         // Error generating QR code
       }
     }
     generateQR()
-  }, [giftCard.id, code, giftCard.currentAmount])
+  }, [currentGiftCard.id, code, currentGiftCard.currentAmount])
 
   // Cargar transacciones
   const loadTransactions = async () => {
     setLoadingTransactions(true)
     try {
-      console.log('Loading transactions for gift card:', giftCard.id)
-      const txs = await service.getGiftCardTransactions(giftCard.id)
+      console.log('Loading transactions for gift card:', currentGiftCard.id)
+      const txs = await service.getGiftCardTransactions(currentGiftCard.id)
       console.log('Loaded transactions:', txs)
       setTransactions(txs)
     } catch (error) {
@@ -120,33 +150,59 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
 
   useEffect(() => {
     loadTransactions()
-  }, [giftCard.id])
+  }, [currentGiftCard.id])
 
   const handleAdjustAmount = async (type: 'add' | 'subtract') => {
     if (adjustAmount <= 0 || !adjustReason.trim()) return
+
+    // Validar que las GiftCards no permitan abonos
+    if (type === 'add' && currentGiftCard.type === 'giftcard') {
+      console.error('Las GiftCards no se pueden recargar, solo usar')
+      return
+    }
 
     setIsAdjusting(true)
     
     try {
       const newAmount = type === 'add' 
-        ? giftCard.currentAmount + adjustAmount
-        : Math.max(0, giftCard.currentAmount - adjustAmount)
+        ? currentGiftCard.currentAmount + adjustAmount
+        : Math.max(0, currentGiftCard.currentAmount - adjustAmount)
 
-      const success = await service.updateGiftCardAmount(
-        giftCard.id, 
+      console.log('Updating gift card amount:', { 
+        id: currentGiftCard.id, 
+        oldAmount: currentGiftCard.currentAmount, 
+        newAmount, 
+        reason: adjustReason 
+      })
+
+      const result = await service.updateGiftCardAmount(
+        currentGiftCard.id, 
         newAmount, 
         `${type === 'add' ? 'Recarga' : 'Descuento'}: ${adjustReason}`
       )
 
-      if (success) {
+      console.log('Update result:', result)
+
+      if (result === true) {
+        console.log('Update successful, refreshing data...')
         setAdjustAmount(0)
         setAdjustReason('')
-        // Recargar transacciones
+        
+        // Refrescar datos de la tarjeta y transacciones
+        await refreshGiftCard()
         await loadTransactions()
         onUpdate()
+        
+        console.log('Data refreshed, closing modal in 1.5s...')
+        // Cerrar modal después de operación exitosa
+        setTimeout(() => {
+          onClose()
+        }, 1500)
+      } else {
+        console.error('Error adjusting amount - result was not true:', result)
       }
     } catch (error) {
-              // Error adjusting amount
+      console.error('Error adjusting amount:', error)
     } finally {
       setIsAdjusting(false)
     }
@@ -156,15 +212,24 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
     setIsAdjusting(true)
     
     try {
-      const success = await service.redeemGiftCard(giftCard.id)
+      const result = await service.redeemGiftCard(currentGiftCard.id, currentGiftCard.currentAmount)
 
-      if (success) {
-        // Recargar transacciones
+      if (result === true) {
+        // Refrescar datos de la tarjeta y transacciones
+        await refreshGiftCard()
         await loadTransactions()
         onUpdate()
+        
+        // Cerrar modal después de operación exitosa
+        setTimeout(() => {
+          onClose()
+        }, 1500)
+      } else if (typeof result === 'object' && result.error) {
+        console.error('Error redeeming card:', result.error)
+        // Aquí podrías mostrar un toast o alert con el error
       }
     } catch (error) {
-              // Error redeeming card
+      console.error('Error redeeming card:', error)
     } finally {
       setIsAdjusting(false)
     }
@@ -206,7 +271,7 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
       })
 
       const link = document.createElement('a')
-      link.download = `giftcard-${code}-${giftCard.ownerName.replace(/\s+/g, '-')}.png`
+      link.download = `giftcard-${code}-${currentGiftCard.ownerName.replace(/\s+/g, '-')}.png`
       link.href = canvas.toDataURL('image/png', 1.0)
       link.click()
     } catch (error) {
@@ -216,7 +281,7 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
     }
   }
 
-  const status = service.getGiftCardStatus(giftCard)
+  const status = service.getGiftCardStatus(currentGiftCard)
 
   return (
     <AnimatePresence>
@@ -247,10 +312,10 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                   <MotomaniaLogo size="sm" animated={false} className="w-full h-full" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-lg sm:text-2xl font-bold truncate">{giftCard.ownerName}</h2>
+                  <h2 className="text-lg sm:text-2xl font-bold truncate">{currentGiftCard.ownerName}</h2>
                   <p className="text-white/80 font-mono text-sm sm:text-lg truncate">{code}</p>
                   <p className="text-white/60 text-xs sm:text-sm">
-                    {giftCard.type === 'giftcard' ? 'Tarjeta de Regalo' : 'Monedero Electrónico'}
+                    {currentGiftCard.type === 'giftcard' ? 'Tarjeta de Regalo' : 'Monedero Electrónico'}
                   </p>
                 </div>
               </div>
@@ -278,13 +343,13 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
               <div className="bg-white/10 rounded-lg p-3 sm:p-4">
                 <p className="text-white/80 text-xs sm:text-sm">Saldo Actual</p>
                 <p className="text-xl sm:text-3xl font-bold text-white">
-                  ${giftCard.currentAmount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  ${currentGiftCard.currentAmount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                 </p>
               </div>
               <div className="bg-white/10 rounded-lg p-3 sm:p-4">
                 <p className="text-white/80 text-xs sm:text-sm">Saldo Inicial</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  ${giftCard.initialAmount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  ${currentGiftCard.initialAmount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                 </p>
               </div>
             </div>
@@ -334,20 +399,20 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                     <div className="space-y-3">
                       <div className="flex items-center space-x-3">
                         <User className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">{giftCard.ownerName}</span>
+                        <span className="font-medium">{currentGiftCard.ownerName}</span>
                       </div>
                       
-                      {giftCard.ownerEmail && (
+                      {currentGiftCard.ownerEmail && (
                         <div className="flex items-center space-x-3">
                           <Mail className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-300">{giftCard.ownerEmail}</span>
+                          <span className="text-sm text-gray-300">{currentGiftCard.ownerEmail}</span>
                         </div>
                       )}
                       
-                      {giftCard.ownerPhone && (
+                      {currentGiftCard.ownerPhone && (
                         <div className="flex items-center space-x-3">
                           <Phone className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-300">{giftCard.ownerPhone}</span>
+                          <span className="text-sm text-gray-300">{currentGiftCard.ownerPhone}</span>
                         </div>
                       )}
                     </div>
@@ -392,8 +457,9 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => handleAdjustAmount('add')}
-                          disabled={isAdjusting || adjustAmount <= 0 || !adjustReason.trim()}
+                          disabled={isAdjusting || adjustAmount <= 0 || !adjustReason.trim() || currentGiftCard.type === 'giftcard'}
                           className="btn-secondary flex items-center justify-center space-x-1 disabled:opacity-50"
+                          title={currentGiftCard.type === 'giftcard' ? 'Las GiftCards no permiten abonos, solo uso' : 'Agregar dinero'}
                         >
                           <Plus className="w-4 h-4" />
                           <span>Agregar</span>
@@ -409,7 +475,16 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                         </button>
                       </div>
                       
-                      {giftCard.currentAmount > 0 && (
+                      {/* Mensaje informativo para GiftCards */}
+                      {currentGiftCard.type === 'giftcard' && (
+                        <div className="bg-amber-900/30 border border-amber-500/50 rounded-lg p-3">
+                          <p className="text-amber-200 text-sm">
+                            💡 Las GiftCards solo permiten retiros/usos. Para recargas, usa un Monedero Electrónico.
+                          </p>
+                        </div>
+                      )}
+                      
+                      {currentGiftCard.currentAmount > 0 && (
                         <button
                           onClick={handleRedeemFull}
                           disabled={isAdjusting}
@@ -433,24 +508,24 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                     <div>
                       <span className="text-gray-400">Fecha de creación:</span>
-                      <p className="font-medium text-gray-200">{giftCard.createdAt.toLocaleDateString()}</p>
+                      <p className="font-medium text-gray-200">{currentGiftCard.createdAt.toLocaleDateString()}</p>
                     </div>
                     
                     <div>
                       <span className="text-gray-400">Última actualización:</span>
-                      <p className="font-medium text-gray-200">{giftCard.updatedAt.toLocaleDateString()}</p>
+                      <p className="font-medium text-gray-200">{currentGiftCard.updatedAt.toLocaleDateString()}</p>
                     </div>
                     
                     <div>
                       <span className="text-gray-400">Estado:</span>
-                      <p className="font-medium text-gray-200">{giftCard.isActive ? 'Activa' : 'Inactiva'}</p>
+                      <p className="font-medium text-gray-200">{currentGiftCard.isActive ? 'Activa' : 'Inactiva'}</p>
                     </div>
                   </div>
                   
-                  {giftCard.notes && (
+                  {currentGiftCard.notes && (
                     <div className="mt-4 p-3 bg-neutral-700/50 rounded-lg">
                       <p className="text-sm text-gray-300">
-                        <span className="font-medium">Notas:</span> {giftCard.notes}
+                        <span className="font-medium">Notas:</span> {currentGiftCard.notes}
                       </p>
                     </div>
                   )}
@@ -522,8 +597,8 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
               >
                 <GiftCardDesign
                   ref={cardRef}
-                  giftCard={giftCard}
-                  qrCodeUrl={qrCodeUrl}
+                  giftCard={currentGiftCard}
+                  qrCodeUrl={qrDataUrl}
                   onExport={handleExportCard}
                   isExporting={isExporting}
                 />

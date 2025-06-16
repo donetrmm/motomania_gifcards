@@ -127,7 +127,11 @@ export default function ExpiringCards({ onCardSelect }: ExpiringCardsProps) {
                         <h4 className="font-semibold text-gray-100 truncate text-base leading-tight text-crisp mobile-crisp ultra-crisp">
                           {card.ownerName}
                         </h4>
-                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-neutral-700/50 text-gray-300 border border-neutral-600 w-fit">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold border w-fit ${
+                          card.type === 'giftcard' 
+                            ? 'bg-orange-900/30 text-orange-400 border-orange-500/50' 
+                            : 'bg-blue-900/30 text-blue-400 border-blue-500/50'
+                        }`}>
                           {card.type === 'giftcard' ? 'GiftCard' : 'Monedero'}
                         </span>
                       </div>

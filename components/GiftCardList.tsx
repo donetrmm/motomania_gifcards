@@ -38,11 +38,23 @@ export default function GiftCardList({ giftCards, onCardSelect, onCardUpdate, on
   const handleQuickAction = async (card: GiftCard, action: 'deactivate' | 'reactivate') => {
     try {
       if (action === 'deactivate') {
-        await service.deactivateGiftCard(card.id)
+        const success = service.deactivateGiftCard(card.id)
+        if (!success) {
+          console.error('Error deactivating card')
+          return
+        }
       } else {
-        // Reactivar tarjeta - necesitamos implementar este método en el servicio
-        const updatedCard = { ...card, isActive: true, updatedAt: new Date() }
-        await service.updateGiftCard(card.id, updatedCard)
+        // Reactivar tarjeta/monedero
+        if (card.type === 'ewallet' && card.currentAmount <= 0) {
+          console.warn('Cannot reactivate wallet with zero balance')
+          return
+        }
+        
+        const result = service.updateGiftCard(card.id, { isActive: true })
+        if (typeof result === 'object' && result.error) {
+          console.error('Error reactivating card:', result.error)
+          return
+        }
       }
       onCardUpdate()
     } catch (error) {
@@ -105,7 +117,11 @@ export default function GiftCardList({ giftCards, onCardSelect, onCardUpdate, on
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${statusColor}`} style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {statusLabel}
                       </span>
-                      <span className="px-2 py-1 rounded-full text-xs font-semibold bg-neutral-700/50 text-gray-300 border border-neutral-600">
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${
+                        card.type === 'giftcard' 
+                          ? 'bg-orange-900/30 text-orange-400 border-orange-500/50' 
+                          : 'bg-blue-900/30 text-blue-400 border-blue-500/50'
+                      }`}>
                         {card.type === 'giftcard' ? 'GiftCard' : 'Monedero'}
                       </span>
                     </div>

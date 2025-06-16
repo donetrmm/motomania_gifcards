@@ -27,6 +27,7 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
   const [isSearching, setIsSearching] = useState(false)
   const [isLibraryLoaded, setIsLibraryLoaded] = useState(false)
   const [qrScanner, setQrScanner] = useState<any>(null)
+  const [cameraPermission, setCameraPermission] = useState<'pending' | 'granted' | 'denied'>('pending')
   
   const service = SupabaseGiftCardService.getInstance()
   const scannerRef = useRef<HTMLDivElement>(null)
@@ -39,8 +40,9 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
         Html5QrcodeScanner = Scanner
         Html5Qrcode = QrCode
         setIsLibraryLoaded(true)
+        console.log('✅ QR library loaded successfully')
       } catch (error) {
-        console.error('Error loading QR library:', error)
+        console.error('❌ Error loading QR library:', error)
         setError('Error al cargar la librería de escaneo QR')
       }
     }
@@ -50,23 +52,61 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
     }
   }, [])
 
-  // Verificar si hay cámara disponible
+  // Verificar si hay cámara disponible y permisos
   useEffect(() => {
-    const checkCamera = async () => {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        try {
-          await navigator.mediaDevices.getUserMedia({ video: true })
-          setHasCamera(true)
-        } catch (error) {
-          console.error('No camera access:', error)
-          setHasCamera(false)
-        }
-      } else {
+    const checkCameraAndPermissions = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.log('❌ Navigator.mediaDevices not available')
         setHasCamera(false)
+        setCameraPermission('denied')
+        return
+      }
+
+      try {
+        // Verificar si hay cámaras disponibles
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const videoDevices = devices.filter(device => device.kind === 'videoinput')
+        
+        if (videoDevices.length === 0) {
+          console.log('❌ No video devices found')
+          setHasCamera(false)
+          setCameraPermission('denied')
+          return
+        }
+
+        console.log(`📹 Found ${videoDevices.length} video device(s):`, videoDevices.map(d => d.label || 'Unknown'))
+
+        // Solicitar permiso de cámara
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment', // Preferir cámara trasera
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        })
+        
+        console.log('✅ Camera permission granted')
+        setHasCamera(true)
+        setCameraPermission('granted')
+        
+        // Cerrar el stream de prueba
+        stream.getTracks().forEach(track => track.stop())
+      } catch (error: any) {
+        console.error('❌ Camera access error:', error)
+        setHasCamera(false)
+        setCameraPermission('denied')
+        
+        if (error.name === 'NotAllowedError') {
+          setError('Permisos de cámara denegados. Por favor, permite el acceso a la cámara y recarga la página.')
+        } else if (error.name === 'NotFoundError') {
+          setError('No se encontró ninguna cámara en este dispositivo.')
+        } else {
+          setError(`Error de cámara: ${error.message}`)
+        }
       }
     }
 
-    checkCamera()
+    checkCameraAndPermissions()
   }, [])
 
   // Limpiar escáner al cerrar
@@ -104,7 +144,7 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
   }
 
   const onScanSuccess = async (decodedText: string, decodedResult: any) => {
-    console.log('QR Code scanned:', decodedText)
+    console.log('🔍 QR Code scanned:', decodedText)
     
     // Detener el escáner
     stopScanning()
@@ -114,17 +154,29 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
     setIsSearching(true)
     
     try {
+      // Intentar parsear como JSON si contiene datos estructurados
+      let codeToSearch = decodedText.trim()
+      try {
+        const qrData = JSON.parse(decodedText)
+        if (qrData.code) {
+          codeToSearch = qrData.code
+        }
+      } catch {
+        // No es JSON, usar el texto tal como está
+      }
+
       // Buscar la tarjeta por el código escaneado
-      const card = await service.findGiftCardByCode(decodedText.trim())
+      const card = await service.findGiftCardByCode(codeToSearch)
       
       if (card) {
+        console.log('✅ Card found:', card.code)
         setScanResult(card)
         onCardFound(card)
       } else {
-        setError(`Código "${decodedText}" no encontrado en el sistema.`)
+        setError(`Código "${codeToSearch}" no encontrado en el sistema.`)
       }
     } catch (error) {
-      console.error('Error processing scanned code:', error)
+      console.error('❌ Error processing scanned code:', error)
       setError('Error al procesar el código escaneado')
     } finally {
       setIsSearching(false)
@@ -132,13 +184,15 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
   }
 
   const onScanFailure = (error: string) => {
-    // No hacer nada en caso de error de escaneo (es normal)
-    // console.warn('QR Scan error:', error)
+    // Solo loggear errores específicos, no todos los intentos de escaneo
+    if (error.includes('NotFoundException') === false) {
+      console.warn('QR Scan error:', error)
+    }
   }
 
-  const startScanning = () => {
-    if (!isLibraryLoaded || !Html5QrcodeScanner || !hasCamera) {
-      setError('Escáner QR no disponible')
+  const startScanning = async () => {
+    if (!isLibraryLoaded || !Html5QrcodeScanner || !hasCamera || cameraPermission !== 'granted') {
+      setError('Escáner QR no disponible o sin permisos de cámara')
       return
     }
 
@@ -154,36 +208,48 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
           throw new Error('Elemento qr-reader no encontrado en el DOM')
         }
 
+        // Limpiar cualquier scanner anterior
+        qrReaderElement.innerHTML = ''
+
+        console.log('🚀 Starting QR scanner...')
+
         const scanner = new Html5QrcodeScanner(
           "qr-reader",
           { 
             fps: 10,
-            qrbox: { width: 250, height: 250 },
+            qrbox: { width: 280, height: 280 },
             aspectRatio: 1.0,
             showTorchButtonIfSupported: true,
             showZoomSliderIfSupported: true,
             defaultZoomValueIfSupported: 1,
+            rememberLastUsedCamera: true,
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true
+            }
           },
           false // verbose logging
         )
 
         scanner.render(onScanSuccess, onScanFailure)
         setQrScanner(scanner)
-      } catch (error) {
-        console.error('Error starting QR scanner:', error)
-        setError('Error al iniciar el escáner QR. Intenta de nuevo.')
+        console.log('✅ QR scanner started successfully')
+      } catch (error: any) {
+        console.error('❌ Error starting QR scanner:', error)
+        setError(`Error al iniciar el escáner QR: ${error.message}`)
         setIsScanning(false)
       }
-    }, 100) // Delay de 100ms para que el DOM esté listo
+    }, 200) // Delay de 200ms para que el DOM esté listo
   }
 
   const stopScanning = () => {
     if (qrScanner) {
       try {
+        console.log('🛑 Stopping QR scanner...')
         qrScanner.clear()
         setQrScanner(null)
+        console.log('✅ QR scanner stopped')
       } catch (error) {
-        console.error('Error stopping scanner:', error)
+        console.error('❌ Error stopping scanner:', error)
       }
     }
     setIsScanning(false)
@@ -192,6 +258,11 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
   const handleScanQR = () => {
     if (!hasCamera) {
       setError('No se detectó cámara en este dispositivo')
+      return
+    }
+
+    if (cameraPermission === 'denied') {
+      setError('Permisos de cámara denegados. Permite el acceso a la cámara y recarga la página.')
       return
     }
 
@@ -204,7 +275,7 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
     // Esperar a que el DOM se actualice antes de iniciar el escáner
     setTimeout(() => {
       startScanning()
-    }, 200)
+    }, 300)
   }
 
   const resetScanner = () => {
@@ -256,20 +327,38 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
         
         <button
           onClick={() => setMode('camera')}
-          disabled={!hasCamera || !isLibraryLoaded}
+          disabled={!hasCamera || !isLibraryLoaded || cameraPermission !== 'granted'}
           className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md font-medium transition-colors ${
             mode === 'camera'
               ? 'bg-neutral-700 text-primary-400 shadow-sm'
               : 'text-gray-300 hover:text-gray-100'
-          } ${(!hasCamera || !isLibraryLoaded) ? 'opacity-50 cursor-not-allowed' : ''}`}
+          } ${(!hasCamera || !isLibraryLoaded || cameraPermission !== 'granted') ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <Camera className="w-4 h-4" />
           <span>Escanear QR</span>
         </button>
       </div>
 
-      {/* Alertas */}
-      {!hasCamera && (
+      {/* Alertas de estado */}
+      {cameraPermission === 'pending' && (
+        <div className="bg-blue-900/30 border border-blue-500/50 rounded-lg p-4">
+          <p className="text-blue-300 text-sm">
+            <AlertCircle className="w-4 h-4 inline mr-2" />
+            Verificando permisos de cámara...
+          </p>
+        </div>
+      )}
+
+      {cameraPermission === 'denied' && (
+        <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4">
+          <p className="text-red-300 text-sm">
+            <AlertCircle className="w-4 h-4 inline mr-2" />
+            Acceso a la cámara denegado. Para usar el escáner QR, permite el acceso a la cámara en tu navegador y recarga la página.
+          </p>
+        </div>
+      )}
+
+      {!hasCamera && cameraPermission === 'granted' && (
         <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4">
           <p className="text-yellow-300 text-sm">
             <AlertCircle className="w-4 h-4 inline mr-2" />
@@ -373,7 +462,7 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
             animate={{ opacity: 1, x: 0 }}
             className="space-y-4"
           >
-            {!isScanning && hasCamera && isLibraryLoaded && (
+            {!isScanning && hasCamera && isLibraryLoaded && cameraPermission === 'granted' && (
               <div className="text-center space-y-4">
                 <div className="w-32 h-32 border-4 border-dashed border-neutral-600 rounded-lg flex items-center justify-center mx-auto">
                   <Camera className="w-16 h-16 text-gray-400" />
@@ -407,16 +496,38 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
                 </div>
                 
                 {/* Contenedor del escáner QR */}
-                <div 
-                  id="qr-reader"
-                  ref={scannerRef}
-                  className="w-full max-w-md mx-auto bg-black rounded-lg overflow-hidden"
-                  style={{ minHeight: '300px' }}
-                />
+                <div className="bg-black rounded-lg overflow-hidden border-2 border-primary-500/50">
+                  <div 
+                    id="qr-reader"
+                    ref={scannerRef}
+                    className="w-full max-w-md mx-auto"
+                    style={{ minHeight: '350px' }}
+                  />
+                </div>
                 
                 <div className="text-center text-sm text-gray-400">
                   <p>Apunta la cámara hacia el código QR de la tarjeta</p>
                   <p>El escaneo se realizará automáticamente</p>
+                </div>
+              </div>
+            )}
+
+            {/* Instrucciones cuando no se puede escanear */}
+            {(!hasCamera || cameraPermission !== 'granted' || !isLibraryLoaded) && (
+              <div className="text-center space-y-4 py-8">
+                <div className="w-32 h-32 border-4 border-dashed border-gray-600 rounded-lg flex items-center justify-center mx-auto opacity-50">
+                  <Camera className="w-16 h-16 text-gray-500" />
+                </div>
+                <div className="text-gray-400">
+                  <p className="font-medium">Escáner QR no disponible</p>
+                  <p className="text-sm mt-2">
+                    {cameraPermission === 'denied' ? 'Permisos de cámara denegados' :
+                     !hasCamera ? 'No se detectó cámara' :
+                     !isLibraryLoaded ? 'Cargando librería...' : 'Error desconocido'}
+                  </p>
+                  <p className="text-sm text-primary-400 mt-2">
+                    Usa la búsqueda manual mientras tanto
+                  </p>
                 </div>
               </div>
             )}

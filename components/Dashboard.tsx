@@ -49,7 +49,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState('cards')
   const [giftCards, setGiftCards] = useState<GiftCard[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'Activa' | 'Canjeada' | 'Vencida' | 'Inactiva'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | GiftCardStatus>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'giftcard' | 'ewallet'>('all')
 
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all')
@@ -228,43 +228,43 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     filteredCards: filteredCards.length,
     activeCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return status === 'Activa'
+      return status === GiftCardStatus.ACTIVE
     }).length,
     totalValue: giftCards.reduce((sum, card) => sum + card.currentAmount, 0),
     filteredValue: filteredCards.reduce((sum, card) => sum + card.currentAmount, 0),
     redeemedCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return status === 'Canjeada'
+      return status === GiftCardStatus.REDEEMED
     }).length,
     expiredCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return status === 'Vencida'
+      return status === GiftCardStatus.EXPIRED
     }).length,
     inactiveCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return status === 'Inactiva'
+      return status === GiftCardStatus.INACTIVE
     }).length,
     giftCards: giftCards.filter(card => card.type === 'giftcard').length,
     ewallets: giftCards.filter(card => card.type === 'ewallet').length,
     // Valores específicos para tarjetas activas por tipo
     activeGiftCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return card.type === 'giftcard' && status === 'Activa'
+      return card.type === 'giftcard' && status === GiftCardStatus.ACTIVE
     }),
     activeEwallets: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return card.type === 'ewallet' && status === 'Activa'
+      return card.type === 'ewallet' && status === GiftCardStatus.ACTIVE
     }),
     totalValueGiftCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return card.type === 'giftcard' && status === 'Activa'
+      return card.type === 'giftcard' && status === GiftCardStatus.ACTIVE
     }).reduce((sum, card) => sum + card.currentAmount, 0),
     totalValueEwallets: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return card.type === 'ewallet' && status === 'Activa'
+      return card.type === 'ewallet' && status === GiftCardStatus.ACTIVE
     }).reduce((sum, card) => sum + card.currentAmount, 0),
     averageValue: giftCards.length > 0 ? giftCards.reduce((sum, card) => sum + card.currentAmount, 0) / giftCards.length : 0,
-    redemptionRate: giftCards.length > 0 ? (giftCards.filter(card => service.getGiftCardStatus(card) === 'Canjeada').length / giftCards.length) * 100 : 0,
+    redemptionRate: giftCards.length > 0 ? (giftCards.filter(card => service.getGiftCardStatus(card) === GiftCardStatus.REDEEMED).length / giftCards.length) * 100 : 0,
     totalTransactions: giftCards.reduce((sum, card) => sum + card.transactions.length, 0),
     recentCards: giftCards.filter(card => {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -708,14 +708,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                          <label className="block text-sm font-medium text-gray-300 mb-2">Estado</label>
                          <select
                            value={statusFilter}
-                           onChange={(e) => setStatusFilter(e.target.value as 'all' | 'Activa' | 'Canjeada' | 'Vencida' | 'Inactiva')}
+                           onChange={(e) => setStatusFilter(e.target.value as 'all' | GiftCardStatus)}
                            className="input-field w-full"
                          >
                            <option value="all">Todos los estados</option>
-                           <option value="Activa">Activas</option>
-                           <option value="Canjeada">Canjeadas</option>
-                           <option value="Vencida">Expiradas</option>
-                           <option value="Inactiva">Inactivas</option>
+                           <option value={GiftCardStatus.ACTIVE}>Activas</option>
+                           <option value={GiftCardStatus.REDEEMED}>Canjeadas</option>
+                           <option value={GiftCardStatus.EXPIRED}>Expiradas</option>
+                           <option value={GiftCardStatus.INACTIVE}>Inactivas</option>
                          </select>
                        </div>
 

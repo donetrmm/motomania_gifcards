@@ -184,14 +184,26 @@ export class GiftCardService {
   }
 
   updateGiftCardAmount(id: string, newAmount: number, description: string): boolean | { error: string } {
+    const card = this.getGiftCardById(id)
+    if (!card) {
+      return { error: 'Tarjeta no encontrada' }
+    }
+
+    // Validar que la tarjeta no esté expirada
+    if (card.expiresAt && new Date() > card.expiresAt) {
+      return { error: 'No se pueden realizar operaciones en tarjetas expiradas' }
+    }
+
+    // Validar que la tarjeta esté activa para operaciones (excepto recargas a monederos)
+    if (!card.isActive && !(card.type === 'ewallet' && newAmount > card.currentAmount)) {
+      return { error: 'Tarjeta inactiva' }
+    }
+
     // Verificar rate limiting
     const rateLimitCheck = rateLimiter.checkLimit('adjustBalance')
     if (!rateLimitCheck.allowed) {
       return { error: rateLimitCheck.message || 'Demasiados ajustes de saldo' }
     }
-
-    const card = this.getGiftCardById(id)
-    if (!card) return { error: 'Tarjeta no encontrada' }
 
     // Sanitizar y validar el nuevo monto
     const sanitizedAmount = DataSanitizer.sanitizeAmount(newAmount)
@@ -219,6 +231,18 @@ export class GiftCardService {
     card.currentAmount = sanitizedAmount
     card.updatedAt = new Date()
 
+    // Auto-reactivar monederos que reciben dinero
+    const wasAutoReactivated = card.type === 'ewallet' && oldAmount <= 0 && sanitizedAmount > 0
+    if (wasAutoReactivated) {
+      card.isActive = true
+      secureLog('info', 'Wallet auto-reactivated due to balance increase', { 
+        id, 
+        ownerName: card.ownerName,
+        oldAmount,
+        newAmount: sanitizedAmount 
+      })
+    }
+
     // Actualizar estado según el tipo
     this.getGiftCardStatus(card)
 
@@ -227,7 +251,7 @@ export class GiftCardService {
       giftCardId: id,
       type: sanitizedAmount < oldAmount ? 'usage' : 'refund',
       amount: Math.abs(sanitizedAmount - oldAmount),
-      description: sanitizedDescription,
+      description: wasAutoReactivated ? `${sanitizedDescription} (Monedero reactivado automáticamente)` : sanitizedDescription,
       timestamp: new Date(),
       performedBy: 'admin'
     }
@@ -244,10 +268,6 @@ export class GiftCardService {
     const card = this.getGiftCardById(id)
     if (!card) {
       return { error: 'Tarjeta no encontrada' }
-    }
-    
-    if (!card.isActive) {
-      return { error: 'Tarjeta inactiva' }
     }
     
     if (card.currentAmount < amount) {
@@ -314,12 +334,13 @@ export class GiftCardService {
         card.status = GiftCardStatus.ACTIVE
       }
     } else {
-      // Monederos: Se pueden recargar, solo inactivos si no tienen dinero
+      // Monederos: Se pueden recargar, auto-reactivar si tienen dinero
       if (card.currentAmount <= 0) {
         card.status = GiftCardStatus.INACTIVE
         card.isActive = false
         card.isRedeemed = false
       } else {
+        // Auto-reactivar monedero si tiene dinero
         card.status = GiftCardStatus.ACTIVE
         card.isActive = true
         card.isRedeemed = false
@@ -505,5 +526,48 @@ export class GiftCardService {
     }
     
     return `DELETE-${card.id.slice(-8).toUpperCase()}`
+  }
+
+  // Nuevo método para actualizar tarjetas completas (necesario para reactivación)
+  updateGiftCard(id: string, updates: Partial<GiftCard>): boolean | { error: string } {
+    const card = this.getGiftCardById(id)
+    if (!card) {
+      return { error: 'Tarjeta no encontrada' }
+    }
+
+    // Aplicar actualizaciones
+    Object.assign(card, updates)
+    card.updatedAt = new Date()
+
+    // Si se está reactivando un monedero con dinero, asegurar que esté activo
+    if (card.type === 'ewallet' && card.currentAmount > 0 && updates.isActive === true) {
+      card.status = GiftCardStatus.ACTIVE
+      card.isActive = true
+      card.isRedeemed = false
+      
+      // Crear transacción de reactivación
+      const transaction: Transaction = {
+        id: crypto.randomUUID(),
+        giftCardId: id,
+        type: 'adjustment',
+        amount: 0,
+        description: 'Monedero reactivado por administrador',
+        timestamp: new Date(),
+        performedBy: 'admin'
+      }
+
+      card.transactions.push(transaction)
+      this.transactions.push(transaction)
+    }
+    
+    this.saveToStorage()
+    
+    secureLog('info', 'Gift card updated successfully', { 
+      id, 
+      updates: Object.keys(updates),
+      ownerName: card.ownerName 
+    })
+    
+    return true
   }
 } 

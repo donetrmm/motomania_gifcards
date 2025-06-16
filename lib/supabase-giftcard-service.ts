@@ -170,7 +170,12 @@ export class SupabaseGiftCardService {
   }
 
   // Obtener GiftCard por ID
-  async getGiftCardById(id: string): Promise<GiftCard | null> {
+  getGiftCardById(id: string): Promise<GiftCard | null> {
+    return this.getGiftCardByIdAsync(id)
+  }
+
+  // Obtener GiftCard por ID (versión asíncrona explícita)
+  async getGiftCardByIdAsync(id: string): Promise<GiftCard | null> {
     try {
       const { data, error } = await supabase
         .from('gift_cards')
@@ -209,11 +214,32 @@ export class SupabaseGiftCardService {
       const giftCard = await this.getGiftCardById(id)
       if (!giftCard) return false
 
+      // Validar que la tarjeta no esté expirada
+      if (giftCard.expiresAt && new Date() > giftCard.expiresAt) {
+        console.error('No se pueden realizar operaciones en tarjetas expiradas')
+        return false
+      }
+
+      // Para GiftCards, no permitir recargas (solo reducciones)
+      if (giftCard.type === 'giftcard' && newAmount > giftCard.currentAmount) {
+        console.error('Las GiftCards no se pueden recargar, solo usar')
+        return false
+      }
+
+      // Auto-reactivar monederos que reciben dinero
+      const wasAutoReactivated = giftCard.type === 'ewallet' && giftCard.currentAmount <= 0 && newAmount > 0
       const amountDifference = newAmount - giftCard.currentAmount
+
+      const updateData: any = { current_amount: newAmount }
+      
+      // Auto-reactivar monedero si aplica
+      if (wasAutoReactivated) {
+        updateData.is_active = true
+      }
 
       const { error } = await supabase
         .from('gift_cards')
-        .update({ current_amount: newAmount })
+        .update(updateData)
         .eq('id', id)
 
       if (error) {
@@ -224,10 +250,11 @@ export class SupabaseGiftCardService {
       // Crear transacción con tipo específico según sea abono o descuento
       if (amountDifference > 0) {
         // Es un abono/recarga
+        const description = wasAutoReactivated ? `Recarga: ${reason} (Monedero reactivado automáticamente)` : `Recarga: ${reason}`
         await this.createTransaction(id, {
           type: 'refund', // Usar 'refund' para abonos/recargas
           amount: amountDifference, // Positivo
-          description: `Recarga: ${reason}`
+          description
         })
       } else if (amountDifference < 0) {
         // Es un descuento/gasto
@@ -246,16 +273,33 @@ export class SupabaseGiftCardService {
   }
 
   // Canjear completamente una GiftCard
-  async redeemGiftCard(id: string): Promise<boolean> {
+  async redeemGiftCard(id: string, amount?: number): Promise<boolean> {
     try {
       const giftCard = await this.getGiftCardById(id)
       if (!giftCard || giftCard.currentAmount <= 0) return false
 
+      // Validar que la tarjeta no esté expirada
+      if (giftCard.expiresAt && new Date() > giftCard.expiresAt) {
+        console.error('No se pueden realizar operaciones en tarjetas expiradas')
+        return false
+      }
+
+      // Si no se especifica monto, canjear completamente
+      const redeemAmount = amount !== undefined ? amount : giftCard.currentAmount
+      
+      // Validar saldo suficiente
+      if (giftCard.currentAmount < redeemAmount) {
+        console.error('Saldo insuficiente')
+        return false
+      }
+
+      const newAmount = giftCard.currentAmount - redeemAmount
+
       const { error } = await supabase
         .from('gift_cards')
         .update({ 
-          current_amount: 0,
-          is_active: giftCard.type === 'ewallet' ? false : true // Monederos se desactivan, GiftCards permanecen activas
+          current_amount: newAmount,
+          is_active: giftCard.type === 'ewallet' && newAmount <= 0 ? false : giftCard.isActive
         })
         .eq('id', id)
 
@@ -267,8 +311,10 @@ export class SupabaseGiftCardService {
       // Crear transacción de uso/canje
       await this.createTransaction(id, {
         type: 'adjustment',
-        amount: giftCard.currentAmount, // Positivo en base de datos
-        description: `Canje completo de ${giftCard.type === 'giftcard' ? 'tarjeta de regalo' : 'monedero'}`
+        amount: redeemAmount,
+        description: redeemAmount === giftCard.currentAmount 
+          ? `Canje completo de ${giftCard.type === 'giftcard' ? 'tarjeta de regalo' : 'monedero'}`
+          : `Canje parcial: $${redeemAmount}`
       })
 
       return true
@@ -488,22 +534,28 @@ export class SupabaseGiftCardService {
     return `DEL${hash}`
   }
 
-  getGiftCardStatus(giftCard: GiftCard): string {
-    if (!giftCard.isActive) {
-      return 'Inactiva'
+  getGiftCardStatus(giftCard: GiftCard): GiftCardStatus {
+    // Lógica diferente para GiftCards vs Monederos
+    if (giftCard.type === 'giftcard') {
+      // GiftCards: Una vez sin dinero, quedan canjeadas permanentemente
+      if (giftCard.currentAmount <= 0) {
+        return GiftCardStatus.REDEEMED
+      } else if (giftCard.expiresAt && new Date() > giftCard.expiresAt) {
+        return GiftCardStatus.EXPIRED
+      } else if (!giftCard.isActive) {
+        return GiftCardStatus.INACTIVE
+      } else {
+        return GiftCardStatus.ACTIVE
+      }
+    } else {
+      // Monederos: Se pueden recargar, auto-reactivar si tienen dinero
+      if (giftCard.currentAmount <= 0) {
+        return GiftCardStatus.INACTIVE
+      } else {
+        // Auto-reactivar monedero si tiene dinero
+        return GiftCardStatus.ACTIVE
+      }
     }
-    
-    if (giftCard.expiresAt && giftCard.expiresAt < new Date()) {
-      return 'Vencida'
-    }
-    
-    if (giftCard.currentAmount <= 0) {
-      // Las giftcards con saldo 0 están "Canjeadas"
-      // Los monederos con saldo 0 están "Inactivos" (pero esto se maneja arriba con isActive)
-      return giftCard.type === 'giftcard' ? 'Canjeada' : 'Sin saldo'
-    }
-    
-    return 'Activa'
   }
 
   // Obtener tarjetas próximas a expirar (versión síncrona para compatibilidad)
