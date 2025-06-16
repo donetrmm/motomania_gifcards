@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { QrCode, Camera, Search, AlertCircle, CheckCircle, X } from 'lucide-react'
+import { QrCode, Camera, Search, AlertCircle, CheckCircle, X, StopCircle } from 'lucide-react'
 import { GiftCardService } from '@/lib/giftcard-service'
 import { GiftCard } from '@/types/giftcard'
+import QrScanner from 'qr-scanner'
 
 interface QRScannerProps {
   onScanSuccess: (data: any) => void
@@ -17,8 +18,27 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
   const [scanResult, setScanResult] = useState<GiftCard | null>(null)
   const [error, setError] = useState('')
   const [mode, setMode] = useState<'manual' | 'camera'>('manual')
+  const [hasCamera, setHasCamera] = useState(false)
+  
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const qrScannerRef = useRef<QrScanner | null>(null)
   
   const service = GiftCardService.getInstance()
+
+  // Verificar si hay cámara disponible
+  useEffect(() => {
+    QrScanner.hasCamera().then(setHasCamera)
+  }, [])
+
+  // Cleanup del scanner al desmontar
+  useEffect(() => {
+    return () => {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.stop()
+        qrScannerRef.current.destroy()
+      }
+    }
+  }, [])
 
   const handleManualSearch = () => {
     if (!manualCode.trim()) {
@@ -49,51 +69,88 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
   }
 
   const handleScanQR = async () => {
+    if (!hasCamera) {
+      setError('No se detectó cámara en este dispositivo')
+      return
+    }
+
     setMode('camera')
     setIsScanning(true)
     setError('')
     setScanResult(null)
     
     try {
-      // Simulación del escáner QR - en producción usarías una librería real
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Simular lectura de QR con datos JSON
-      const allCards = service.getAllGiftCards()
-      if (allCards.length > 0) {
-        const randomCard = allCards[Math.floor(Math.random() * allCards.length)]
-        
-        // Simular datos QR como los que se generan en GiftCardDetail
-        const qrData = {
-          cardId: randomCard.id,
-          code: service.deobfuscateCode(randomCard.code),
-          amount: randomCard.currentAmount,
-          timestamp: Date.now()
-        }
-        
-        // Buscar la tarjeta por ID
-        const foundCard = service.getGiftCardById(qrData.cardId)
-        if (foundCard) {
-          setScanResult(foundCard)
-          onScanSuccess(foundCard)
-        } else {
-          setError('Tarjeta no encontrada en el sistema')
-        }
-      } else {
-        setError('No hay tarjetas en el sistema para escanear')
+      if (videoRef.current) {
+        // Crear el scanner QR
+        qrScannerRef.current = new QrScanner(
+          videoRef.current,
+          (result) => {
+            // Resultado del QR escaneado
+            try {
+              // Intentar parsear como JSON (datos QR generados por la app)
+              let qrData
+              try {
+                qrData = JSON.parse(result.data)
+              } catch {
+                // Si no es JSON, asumir que es un código directo
+                qrData = { code: result.data }
+              }
+
+              // Buscar la tarjeta
+              const allCards = service.getAllGiftCards()
+              let foundCard = null
+
+              if (qrData.cardId) {
+                // Buscar por ID si está disponible
+                foundCard = service.getGiftCardById(qrData.cardId)
+              } else if (qrData.code) {
+                // Buscar por código
+                foundCard = allCards.find(c => {
+                  const deobfuscatedCode = service.deobfuscateCode(c.code)
+                  return deobfuscatedCode === qrData.code || c.code === qrData.code
+                })
+              }
+
+              if (foundCard) {
+                setScanResult(foundCard)
+                onScanSuccess(foundCard)
+                stopScanning()
+              } else {
+                setError('Tarjeta no encontrada en el sistema')
+                stopScanning()
+              }
+            } catch (err) {
+              setError('Error al procesar el código QR')
+              stopScanning()
+            }
+          },
+          {
+            preferredCamera: 'environment', // Usar cámara trasera si está disponible
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+          }
+        )
+
+        await qrScannerRef.current.start()
       }
-    } catch (error) {
-      setError('Error al escanear el código QR')
-    } finally {
+    } catch (error: any) {
+      setError(`Error al iniciar la cámara: ${error.message || 'Permisos denegados'}`)
       setIsScanning(false)
     }
   }
 
+  const stopScanning = () => {
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop()
+    }
+    setIsScanning(false)
+  }
+
   const resetScanner = () => {
+    stopScanning()
     setScanResult(null)
     setError('')
     setManualCode('')
-    setIsScanning(false)
     setMode('manual')
   }
 
@@ -114,7 +171,7 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
       </motion.div>
 
       {/* Selector de modo */}
-              <div className="flex rounded-lg border border-neutral-600 p-1 bg-neutral-800/50">
+      <div className="flex rounded-lg border border-neutral-600 p-1 bg-neutral-800/50">
         <button
           onClick={() => setMode('manual')}
           className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md font-medium transition-colors ${
@@ -129,16 +186,26 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
         
         <button
           onClick={() => setMode('camera')}
+          disabled={!hasCamera}
           className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md font-medium transition-colors ${
             mode === 'camera'
               ? 'bg-neutral-700 text-primary-400 shadow-sm'
               : 'text-gray-300 hover:text-gray-100'
-          }`}
+          } ${!hasCamera ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <Camera className="w-4 h-4" />
           <span>Escanear QR</span>
         </button>
       </div>
+
+      {!hasCamera && mode === 'camera' && (
+        <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4">
+          <p className="text-yellow-300 text-sm">
+            <AlertCircle className="w-4 h-4 inline mr-2" />
+            No se detectó cámara en este dispositivo. Usa el código manual.
+          </p>
+        </div>
+      )}
 
       {/* Contenido principal */}
       <div className="card">
@@ -177,7 +244,7 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
           </motion.div>
         )}
 
-        {mode === 'camera' && (
+        {mode === 'camera' && hasCamera && (
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -206,35 +273,44 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
 
             {isScanning && (
               <div className="space-y-4">
-                <div className="relative w-48 h-48 border-4 border-primary-500 rounded-lg mx-auto overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary-100 to-secondary-100 flex items-center justify-center">
-                    <div className="w-16 h-16 border-4 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
+                <div className="relative w-full max-w-sm mx-auto">
+                  <video
+                    ref={videoRef}
+                    className="w-full h-64 bg-black rounded-lg object-cover"
+                    playsInline
+                    muted
+                  />
+                  
+                  {/* Overlay de escaneado */}
+                  <div className="absolute inset-0 border-4 border-primary-500 rounded-lg pointer-events-none">
+                    <div className="absolute inset-4 border-2 border-white/50 rounded-lg"></div>
                   </div>
                   
                   {/* Línea de escaneo animada */}
                   <motion.div
-                    initial={{ y: -10 }}
-                    animate={{ y: 180 }}
+                    initial={{ y: 20 }}
+                    animate={{ y: 240 }}
                     transition={{
                       duration: 2,
                       repeat: Infinity,
                       ease: 'linear'
                     }}
-                    className="absolute left-0 right-0 h-1 bg-primary-500 shadow-lg"
+                    className="absolute left-4 right-4 h-0.5 bg-primary-400 shadow-lg"
                   />
                 </div>
                 
                 <div>
                   <p className="font-medium text-gray-100">Escaneando...</p>
-                  <p className="text-sm text-gray-300">
+                  <p className="text-sm text-gray-300 mb-3">
                     Mantén el código QR dentro del marco
                   </p>
                   
                   <button
-                    onClick={() => setIsScanning(false)}
-                    className="mt-3 text-sm text-gray-400 hover:text-gray-200 underline"
+                    onClick={stopScanning}
+                    className="btn-secondary flex items-center space-x-2 mx-auto"
                   >
-                    Cancelar
+                    <StopCircle className="w-4 h-4" />
+                    <span>Detener</span>
                   </button>
                 </div>
               </div>
@@ -340,9 +416,12 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
         <h4 className="font-semibold text-blue-400 mb-2">Instrucciones</h4>
         <ul className="text-sm text-gray-300 space-y-1 list-disc list-inside">
           <li><strong>Código Manual:</strong> Ingresa el código exacto de la tarjeta (ej: MM123456789)</li>
-          <li><strong>Escáner QR:</strong> Usa la cámara para escanear el código QR de la tarjeta</li>
+          <li><strong>Escáner QR:</strong> Permite acceso a la cámara para escanear el código QR de la tarjeta</li>
           <li>Una vez encontrada la tarjeta, podrás ver todos sus detalles y gestionar el saldo</li>
           <li>Asegúrate de que el código esté completo y sin espacios</li>
+          {hasCamera && (
+            <li className="text-green-400"><strong>Cámara detectada:</strong> Puedes usar el escáner QR real</li>
+          )}
         </ul>
       </div>
     </div>

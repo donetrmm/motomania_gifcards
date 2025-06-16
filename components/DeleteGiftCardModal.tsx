@@ -27,10 +27,13 @@ export default function DeleteGiftCardModal({
   const { addToast } = useToast()
   const service = GiftCardService.getInstance()
 
-  // Auto scroll al modal y atajo Escape
+  // Prevenir scroll del body y configurar modal
   useEffect(() => {
     if (isOpen) {
-      // Auto scroll al modal
+      // Prevenir scroll del body
+      document.body.style.overflow = 'hidden'
+      
+      // Auto scroll al modal (esto funcionaba bien)
       const modalElement = document.querySelector('[data-modal="delete-card"]')
       if (modalElement) {
         modalElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -44,7 +47,11 @@ export default function DeleteGiftCardModal({
       }
 
       document.addEventListener('keydown', handleEscape)
-      return () => document.removeEventListener('keydown', handleEscape)
+      return () => {
+        document.removeEventListener('keydown', handleEscape)
+        // Restaurar scroll del body al cerrar
+        document.body.style.overflow = 'unset'
+      }
     }
   }, [isOpen, isDeleting])
 
@@ -143,10 +150,21 @@ export default function DeleteGiftCardModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div 
+      className="fixed bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50" 
+      style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0,
+        height: '100vh',
+        width: '100vw'
+      }}
+    >
       <div 
         data-modal="delete-card"
-        className="bg-neutral-800 border border-neutral-700/50 rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+        className="bg-neutral-800 border border-neutral-700/50 rounded-lg max-w-md w-full h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-red-500/30 bg-red-900/20">
           <div className="flex items-center space-x-3">
@@ -166,7 +184,7 @@ export default function DeleteGiftCardModal({
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {step === 1 ? (
             // Step 1: Selección de acción y advertencia
             <div className="space-y-4">

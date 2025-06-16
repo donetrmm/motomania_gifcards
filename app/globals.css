@@ -42,6 +42,22 @@
     height: 4.5rem;
   }
   
+  .w-24 {
+    width: 6rem;
+  }
+  
+  .h-24 {
+    height: 6rem;
+  }
+  
+  .w-28 {
+    width: 7rem;
+  }
+  
+  .h-28 {
+    height: 7rem;
+  }
+  
   .h-11 {
     height: 2.75rem;
   }
@@ -54,6 +70,16 @@
   .giftcard::before {
     content: '';
     @apply absolute inset-0 bg-gradient-to-r from-black/10 to-transparent;
+  }
+
+  /* Ocultar scrollbar pero mantener funcionalidad */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -183,4 +209,86 @@
       -webkit-transform: translate3d(0, 0, 0) !important;
       transform: translate3d(0, 0, 0) !important;
     }
-  } 
+  }
+
+  /* Estilos para tarjeta con forma real */
+  .gift-card-realistic {
+    /* Proporción estándar de tarjeta de crédito: 85.60 × 53.98 mm */
+    aspect-ratio: 1.586 / 1;
+    /* Tamaños responsivos manteniendo la proporción */
+    width: 100%;
+    max-width: 340px; /* En móvil pequeño */
+  }
+
+  @media (min-width: 640px) {
+    .gift-card-realistic {
+      max-width: 380px; /* En móvil grande */
+    }
+  }
+
+  @media (min-width: 768px) {
+    .gift-card-realistic {
+      max-width: 460px; /* En tablet */
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .gift-card-realistic {
+      max-width: 520px; /* En desktop - más grande */
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .gift-card-realistic {
+      max-width: 560px; /* En desktop grande */
+    }
+  }
+
+  /* Ajustes de texto para mantener legibilidad en todos los tamaños */
+  .gift-card-realistic .card-text-xs {
+    font-size: 0.65rem; /* Más pequeño en móvil */
+  }
+
+  .gift-card-realistic .card-text-sm {
+    font-size: 0.75rem;
+  }
+
+  @media (min-width: 640px) {
+    .gift-card-realistic .card-text-xs {
+      font-size: 0.75rem;
+    }
+    
+    .gift-card-realistic .card-text-sm {
+      font-size: 0.875rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .gift-card-realistic .card-text-xs {
+      font-size: 0.8rem;
+    }
+    
+    .gift-card-realistic .card-text-sm {
+      font-size: 0.95rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .gift-card-realistic .card-text-xs {
+      font-size: 0.875rem; /* Escalado para desktop */
+    }
+    
+    .gift-card-realistic .card-text-sm {
+      font-size: 1.1rem; /* Escalado para desktop */
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .gift-card-realistic .card-text-xs {
+      font-size: 0.95rem; /* Escalado para desktop grande */
+    }
+    
+    .gift-card-realistic .card-text-sm {
+      font-size: 1.2rem; /* Escalado para desktop grande */
+    }
+  }

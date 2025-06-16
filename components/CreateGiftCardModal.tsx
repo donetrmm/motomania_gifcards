@@ -23,12 +23,21 @@ export default function CreateGiftCardModal({ type, onClose, onSuccess }: Create
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Scroll automático al abrir el modal
+  // Prevenir scroll del body y auto-scroll al modal
   useEffect(() => {
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
+    // Prevenir scroll del body
+    document.body.style.overflow = 'hidden'
+    
+    // Auto scroll al modal
+    const modalElement = document.querySelector('[data-modal="create-giftcard"]')
+    if (modalElement) {
+      modalElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+
+    // Cleanup: restaurar scroll del body al cerrar
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
   }, [])
 
   // Manejo de ESC para cerrar modal
@@ -112,14 +121,25 @@ export default function CreateGiftCardModal({ type, onClose, onSuccess }: Create
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-[9999] overflow-y-auto">
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-neutral-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-neutral-700/50"
-          >
+      <div 
+        className="fixed bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-2 sm:p-4" 
+        style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0,
+          height: '100vh',
+          width: '100vw'
+        }}
+      >
+        <motion.div
+          data-modal="create-giftcard"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          className="bg-neutral-800 rounded-2xl shadow-2xl w-full max-w-2xl h-[95vh] sm:max-h-[90vh] flex flex-col border border-neutral-700/50 overflow-hidden"
+        >
           <div className="sticky top-0 z-50 bg-neutral-800 rounded-t-2xl border-b border-neutral-700 px-6 py-4 flex items-center justify-between shadow-lg">
             <h2 className="text-2xl font-bold text-gray-100">
               {type === 'giftcard' ? 'Crear Nueva GiftCard' : 'Crear Nuevo Monedero Electrónico'}
@@ -132,7 +152,7 @@ export default function CreateGiftCardModal({ type, onClose, onSuccess }: Create
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 pt-8 space-y-6">
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 pt-6 sm:pt-8 space-y-6">
             {/* Información del propietario */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-100 flex items-center space-x-2">
@@ -323,9 +343,8 @@ export default function CreateGiftCardModal({ type, onClose, onSuccess }: Create
                 )}
               </button>
             </div>
-          </form>
-          </motion.div>
-        </div>
+                    </form>
+        </motion.div>
       </div>
     </AnimatePresence>
   )

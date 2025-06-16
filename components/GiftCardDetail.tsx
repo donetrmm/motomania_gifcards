@@ -45,13 +45,21 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
   const cardRef = useRef<HTMLDivElement>(null)
   const code = deobfuscateCode(giftCard.code)
 
-  // Scroll automático al abrir el modal
+  // Prevenir scroll del body y auto-scroll al modal
   useEffect(() => {
-    // Scroll suave hacia arriba cuando se abre el modal
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
+    // Prevenir scroll del body
+    document.body.style.overflow = 'hidden'
+    
+    // Auto scroll al modal
+    const modalElement = document.querySelector('[data-modal="giftcard-detail"]')
+    if (modalElement) {
+      modalElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+
+    // Cleanup: restaurar scroll del body al cerrar
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
   }, [])
 
   // Manejo de ESC para cerrar modal
@@ -147,19 +155,41 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
     setIsExporting(true)
     
     try {
+      // Esperar un momento para que todos los elementos se rendericen completamente
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: 'transparent',
-        scale: 2,
+        backgroundColor: null,
+        scale: 3, // Mayor escala para mejor calidad
         logging: false,
-        useCORS: true
+        useCORS: true,
+        allowTaint: false,
+        foreignObjectRendering: false,
+        imageTimeout: 15000,
+        removeContainer: true,
+        // Mejorar la captura de fuentes y estilos
+        onclone: (clonedDoc, element) => {
+          // Asegurar que las fuentes se carguen correctamente
+          const clonedElement = element as HTMLElement
+          clonedElement.style.fontFamily = 'Inter, system-ui, sans-serif'
+          
+          // Aplicar estilos para mejor renderizado
+          const allElements = clonedElement.querySelectorAll('*')
+          allElements.forEach((el: any) => {
+            if (el.style) {
+              el.style.webkitFontSmoothing = 'antialiased'
+              el.style.mozOsxFontSmoothing = 'grayscale'
+            }
+          })
+        }
       })
 
       const link = document.createElement('a')
       link.download = `giftcard-${code}-${giftCard.ownerName.replace(/\s+/g, '-')}.png`
-      link.href = canvas.toDataURL()
+      link.href = canvas.toDataURL('image/png', 1.0)
       link.click()
     } catch (error) {
-              // Error exporting card
+      console.error('Error exporting card:', error)
     } finally {
       setIsExporting(false)
     }
@@ -172,59 +202,70 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-[9999] overflow-y-auto">
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-neutral-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-neutral-700/50"
-          >
+      <div 
+        className="fixed bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-2 sm:p-4" 
+        style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0,
+          height: '100vh',
+          width: '100vw'
+        }}
+      >
+        <motion.div
+          data-modal="giftcard-detail"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          className="bg-neutral-800 rounded-2xl shadow-2xl w-full max-w-4xl h-[95vh] sm:max-h-[90vh] flex flex-col border border-neutral-700/50 overflow-hidden"
+        >
           {/* Header */}
-          <div className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white p-6">
+          <div className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white p-4 sm:p-6 flex-shrink-0">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-8 rounded-lg p-1 flex items-center justify-center">
+              <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
+                <div className="w-12 h-6 sm:w-16 sm:h-8 rounded-lg p-1 flex items-center justify-center flex-shrink-0">
                   <MotomaniaLogo size="sm" animated={false} className="w-full h-full" />
                 </div>
-                <div>
-                  <h2 className="text-2xl font-bold">{giftCard.ownerName}</h2>
-                  <p className="text-white/80 font-mono text-lg">{code}</p>
-                  <p className="text-white/60 text-sm">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-lg sm:text-2xl font-bold truncate">{giftCard.ownerName}</h2>
+                  <p className="text-white/80 font-mono text-sm sm:text-lg truncate">{code}</p>
+                  <p className="text-white/60 text-xs sm:text-sm">
                     {giftCard.type === 'giftcard' ? 'Tarjeta de Regalo' : 'Monedero Electrónico'}
                   </p>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
                 <button
                   onClick={handleExportCard}
                   disabled={isExporting}
                   className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors disabled:opacity-50"
                   title="Exportar tarjeta"
                 >
-                  <Download className="w-5 h-5" />
+                  <Download className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
                 <button
                   onClick={onClose}
                   className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
             </div>
 
             {/* Balance */}
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div className="bg-white/10 rounded-lg p-4">
-                <p className="text-white/80 text-sm">Saldo Actual</p>
-                <p className="text-3xl font-bold text-white">
+            <div className="mt-3 sm:mt-4 grid grid-cols-2 gap-2 sm:gap-4">
+              <div className="bg-white/10 rounded-lg p-3 sm:p-4">
+                <p className="text-white/80 text-xs sm:text-sm">Saldo Actual</p>
+                <p className="text-xl sm:text-3xl font-bold text-white">
                   ${giftCard.currentAmount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                 </p>
               </div>
-              <div className="bg-white/10 rounded-lg p-4">
-                <p className="text-white/80 text-sm">Saldo Inicial</p>
-                <p className="text-xl font-semibold text-white">
+              <div className="bg-white/10 rounded-lg p-3 sm:p-4">
+                <p className="text-white/80 text-xs sm:text-sm">Saldo Inicial</p>
+                <p className="text-lg sm:text-xl font-semibold text-white">
                   ${giftCard.initialAmount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                 </p>
               </div>
@@ -232,8 +273,8 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
           </div>
 
           {/* Navigation */}
-                      <div className="border-b border-neutral-700">
-            <div className="flex space-x-8 px-6">
+          <div className="border-b border-neutral-700 flex-shrink-0">
+            <div className="flex overflow-x-auto scrollbar-hide px-4 sm:px-6">
               {[
                 { id: 'details', label: 'Detalles', icon: User },
                 { id: 'transactions', label: 'Transacciones', icon: History },
@@ -242,21 +283,22 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                 <button
                   key={id}
                   onClick={() => setActiveTab(id as any)}
-                  className={`flex items-center space-x-2 py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                  className={`flex items-center space-x-2 py-3 sm:py-4 px-3 sm:px-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap flex-shrink-0 ${
                     activeTab === id
                       ? 'border-primary-500 text-primary-400'
                       : 'border-transparent text-gray-400 hover:text-gray-200'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
-                  <span>{label}</span>
+                  <span className="hidden sm:inline">{label}</span>
+                  <span className="sm:hidden">{label.split(' ')[0]}</span>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Content */}
-          <div className="p-6 max-h-[60vh] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             {activeTab === 'details' && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -264,7 +306,7 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                 className="space-y-6"
               >
                 {/* Información del propietario */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                   <div className="card">
                     <h3 className="text-lg font-semibold text-gray-100 mb-4 flex items-center space-x-2">
                       <User className="w-5 h-5 text-primary-400" />
@@ -370,7 +412,7 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                     <span>Información Adicional</span>
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                     <div>
                       <span className="text-gray-400">Fecha de creación:</span>
                       <p className="font-medium text-gray-200">{giftCard.createdAt.toLocaleDateString()}</p>
@@ -463,7 +505,6 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
             )}
           </div>
           </motion.div>
-        </div>
       </div>
     </AnimatePresence>
   )

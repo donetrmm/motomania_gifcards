@@ -36,10 +36,10 @@ const GiftCardDesign = forwardRef<HTMLDivElement, GiftCardDesignProps>(
         </div>
 
         {/* Diseño de la tarjeta */}
-        <div className="flex justify-center">
+        <div className="flex justify-center px-4">
           <div
             ref={ref}
-            className="relative w-full max-w-[400px] h-[250px] rounded-2xl overflow-hidden shadow-2xl mx-4 sm:mx-0"
+            className="gift-card-realistic relative rounded-2xl overflow-hidden shadow-2xl"
             style={{
               background: giftCard.type === 'giftcard' 
                 ? 'linear-gradient(135deg, #FF8C00 0%, #FF6600 50%, #FF4500 100%)'
@@ -48,16 +48,16 @@ const GiftCardDesign = forwardRef<HTMLDivElement, GiftCardDesignProps>(
           >
             {/* Efectos de fondo sutiles */}
             <div className="absolute inset-0 opacity-20">
-              <div className="absolute top-4 right-4 w-24 h-24 rounded-full bg-white/10" />
-              <div className="absolute bottom-4 left-4 w-16 h-16 rounded-full bg-white/15" />
+              <div className="absolute top-3 right-3 w-16 h-16 rounded-full bg-white/10" />
+              <div className="absolute bottom-3 left-3 w-12 h-12 rounded-full bg-white/15" />
             </div>
 
-                        {/* Contenido principal */}
-            <div className="relative z-10 h-full flex flex-col p-5 text-white">
-              {/* Header con logo y tipo */}
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  <div className="w-18 h-11 flex items-center justify-center flex-shrink-0">
+            {/* Contenido principal */}
+            <div className="relative z-10 h-full flex flex-col p-4 lg:p-6 xl:p-7 text-white">
+              {/* Header con logo, tipo y QR */}
+              <div className="flex items-start justify-between mb-4 lg:mb-5 xl:mb-6">
+                <div className="flex items-center space-x-2 lg:space-x-3 xl:space-x-4 flex-1 min-w-0 mr-3">
+                  <div className="w-12 h-7 lg:w-16 lg:h-9 xl:w-18 xl:h-11 flex items-center justify-center flex-shrink-0">
                     <img 
                       src="/motomania_cards.png" 
                       alt="Motomania Logo" 
@@ -65,20 +65,20 @@ const GiftCardDesign = forwardRef<HTMLDivElement, GiftCardDesignProps>(
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-white font-bold leading-none">
+                    <p className="card-text-xs text-white font-bold leading-tight">
                       {giftCard.type === 'giftcard' ? 'TARJETA DE REGALO' : 'MONEDERO ELECTRÓNICO'}
                     </p>
-                    <p className="text-xs text-white/80 mt-1">Motomania</p>
+                    <p className="card-text-xs text-white/80 mt-0.5">Motomania</p>
                   </div>
                 </div>
                 
                 {/* QR Code en esquina superior derecha */}
-                <div className="w-18 h-18 rounded-xl p-2 flex items-center justify-center flex-shrink-0">
+                <div className="w-12 h-12 lg:w-24 lg:h-24 xl:w-28 xl:h-28 rounded-lg p-1 lg:p-2 xl:p-3 flex items-center justify-center flex-shrink-0">
                   {qrCodeUrl ? (
                     <img 
                       src={qrCodeUrl} 
                       alt="QR Code" 
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-contain rounded"
                       crossOrigin="anonymous"
                     />
                   ) : (
@@ -89,32 +89,32 @@ const GiftCardDesign = forwardRef<HTMLDivElement, GiftCardDesignProps>(
                 </div>
               </div>
 
-              {/* Información del propietario */}
-              <div className="mb-4">
+              {/* Información del propietario - más espacio */}
+              <div className="mb-4 lg:mb-5 xl:mb-6">
                 {giftCard.type === 'giftcard' ? (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-sm text-white/80 font-medium">PARA:</span>
-                    <span className="text-lg font-bold text-white leading-none">{giftCard.ownerName}</span>
+                  <div className="flex flex-wrap items-baseline gap-1.5">
+                    <span className="card-text-xs text-white/80 font-medium whitespace-nowrap">PARA:</span>
+                    <span className="card-text-sm font-bold text-white leading-none break-words">{giftCard.ownerName}</span>
                   </div>
                 ) : (
                   <div>
-                    <p className="text-lg font-bold text-white leading-none">{giftCard.ownerName}</p>
+                    <p className="card-text-sm font-bold text-white leading-none break-words">{giftCard.ownerName}</p>
                   </div>
                 )}
               </div>
 
               {/* Código de tarjeta y fecha en la misma sección */}
               <div className="flex-1 flex flex-col justify-between">
-                <div className="mb-3">
-                  <p className="text-xs text-white/80 mb-2 uppercase tracking-wide">Código de Tarjeta</p>
-                  <p className="font-mono text-xl font-bold text-white tracking-widest leading-none">{code}</p>
+                <div className="mb-2 lg:mb-3 xl:mb-4">
+                  <p className="card-text-xs text-white/80 mb-1 lg:mb-1.5 xl:mb-2 uppercase tracking-wide">Código de Tarjeta</p>
+                  <p className="font-mono card-text-sm font-bold text-white tracking-widest leading-none">{code}</p>
                 </div>
 
                 {/* Fecha de expiración - dentro del área segura */}
                 <div className="flex justify-end">
                   <div className="text-right">
-                    <p className="text-xs text-white/90 font-medium">Expiración:</p>
-                    <p className="text-sm font-bold text-white leading-none">
+                    <p className="card-text-xs text-white/90 font-medium">Expiración:</p>
+                    <p className="card-text-xs font-bold text-white leading-none">
                       {giftCard.expiresAt 
                         ? giftCard.expiresAt.toLocaleDateString('es-ES', {
                             day: '2-digit',
