@@ -1,0 +1,41 @@
+<svg width="200" height="60" viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="orangeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF8C00;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FF6600;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- MOT -->
+  <g fill="url(#orangeGradient)">
+    <!-- M -->
+    <path d="M10 15 L10 45 L15 45 L15 25 L22 35 L28 25 L28 45 L33 45 L33 15 L25 15 L25 30 L22 25 L19 30 L19 15 Z"/>
+    
+    <!-- O -->
+    <circle cx="50" cy="30" r="12" fill="none" stroke="url(#orangeGradient)" stroke-width="5"/>
+    <circle cx="50" cy="30" r="5" fill="url(#orangeGradient)"/>
+    
+    <!-- T -->
+    <rect x="70" y="15" width="25" height="5" fill="url(#orangeGradient)"/>
+    <rect x="80" y="15" width="5" height="30" fill="url(#orangeGradient)"/>
+  </g>
+  
+  <!-- MANIA -->
+  <g fill="url(#orangeGradient)">
+    <!-- M -->
+    <path d="M110 15 L110 45 L115 45 L115 25 L122 35 L128 25 L128 45 L133 45 L133 15 L125 15 L125 30 L122 25 L119 30 L119 15 Z"/>
+    
+    <!-- A -->
+    <path d="M145 45 L145 40 L155 40 L155 45 L160 45 L150 15 L145 15 L135 45 Z M147 30 L153 30 L150 22 Z"/>
+    
+    <!-- N -->
+    <path d="M170 15 L170 45 L175 45 L175 25 L185 40 L185 45 L190 45 L190 15 L185 15 L185 35 L175 20 L175 15 Z"/>
+    
+    <!-- I -->
+    <rect x="195" y="15" width="5" height="30" fill="url(#orangeGradient)"/>
+    <rect x="195" y="35" width="5" height="5" fill="url(#orangeGradient)"/>
+    
+    <!-- A -->
+    <path d="M210 45 L210 40 L220 40 L220 45 L225 45 L215 15 L210 15 L200 45 Z M212 30 L218 30 L215 22 Z"/>
+  </g>
+</svg> 

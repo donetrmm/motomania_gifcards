@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'kern' 1;
+    font-variant-ligatures: common-ligatures;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary-500 hover:bg-secondary-600 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+  
+  .card {
+    @apply bg-neutral-800 rounded-xl shadow-lg border border-neutral-700/50 p-6 transition-all duration-300 hover:shadow-xl hover:bg-neutral-700 text-gray-100;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-3 border border-neutral-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-neutral-800/60 text-gray-100 placeholder-gray-400;
+  }
+
+  /* Tamaños personalizados para mejor responsive */
+  .w-18 {
+    width: 4.5rem;
+  }
+  
+  .h-18 {
+    height: 4.5rem;
+  }
+  
+  .h-11 {
+    height: 2.75rem;
+  }
+  
+  .giftcard {
+    @apply relative overflow-hidden rounded-2xl shadow-2xl;
+    background: linear-gradient(135deg, #FF8C00, #FF6600, #FF4500);
+  }
+  
+  .giftcard::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-r from-black/10 to-transparent;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+  .shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* CLASES DEFINITIVAS PARA RENDERIZADO NÍTIDO */
+  .text-crisp {
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
+    font-feature-settings: 'kern' 1 !important;
+    -webkit-transform: translate3d(0, 0, 0) !important;
+    transform: translate3d(0, 0, 0) !important;
+    -webkit-backface-visibility: hidden !important;
+    backface-visibility: hidden !important;
+  }
+
+  .mobile-crisp {
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
+    font-feature-settings: 'kern' 1, 'tnum' 1 !important;
+    -webkit-transform: translate3d(0, 0, 0) !important;
+    transform: translate3d(0, 0, 0) !important;
+    -webkit-backface-visibility: hidden !important;
+    backface-visibility: hidden !important;
+    font-display: swap !important;
+    font-variant-numeric: tabular-nums !important;
+  }
+
+  .ultra-crisp {
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
+    -webkit-transform: translate3d(0, 0, 0) !important;
+    transform: translate3d(0, 0, 0) !important;
+    -webkit-backface-visibility: hidden !important;
+    backface-visibility: hidden !important;
+    font-feature-settings: 'kern' 1 !important;
+    font-display: swap !important;
+  }
+
+  /* SOLUCIÓN DEFINITIVA PARA RENDERIZADO NÍTIDO */
+  * {
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
+    -webkit-transform: translate3d(0, 0, 0) !important;
+    transform: translate3d(0, 0, 0) !important;
+    -webkit-backface-visibility: hidden !important;
+    backface-visibility: hidden !important;
+    will-change: auto !important;
+    /* ELIMINAR CUALQUIER BLUR */
+    -webkit-filter: none !important;
+    filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Mejoras específicas para dispositivos móviles */
+  @media (max-width: 768px) {
+    * {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      /* RENDERIZADO NÍTIDO EXTREMO PARA MÓVILES */
+      -webkit-font-smoothing: antialiased !important;
+      -moz-osx-font-smoothing: grayscale !important;
+      text-rendering: optimizeLegibility !important;
+      -webkit-transform: translate3d(0, 0, 0) scale(1) !important;
+      transform: translate3d(0, 0, 0) scale(1) !important;
+      -webkit-backface-visibility: hidden !important;
+      backface-visibility: hidden !important;
+      font-display: swap !important;
+      font-synthesis: weight style !important;
+    }
+    
+    input, textarea, select {
+      -webkit-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
+      user-select: text;
+    }
+
+    /* Texto EXTREMADAMENTE nítido en móviles */
+    h1, h2, h3, h4, h5, h6, p, span, div, button, a {
+      -webkit-font-smoothing: antialiased !important;
+      -moz-osx-font-smoothing: grayscale !important;
+      text-rendering: optimizeLegibility !important;
+      -webkit-transform: translate3d(0, 0, 0) !important;
+      transform: translate3d(0, 0, 0) !important;
+      font-feature-settings: 'kern' 1 !important;
+      font-display: swap !important;
+    }
+
+    /* Números y códigos EXTREMADAMENTE nítidos */
+    .font-mono, [style*="font-variant-numeric"], .mobile-crisp, .ultra-crisp {
+      -webkit-font-smoothing: antialiased !important;
+      -moz-osx-font-smoothing: grayscale !important;
+      text-rendering: optimizeLegibility !important;
+      font-feature-settings: 'tnum' 1, 'kern' 1 !important;
+      -webkit-transform: translate3d(0, 0, 0) !important;
+      transform: translate3d(0, 0, 0) !important;
+      font-variant-numeric: tabular-nums !important;
+      font-display: swap !important;
+    }
+
+    /* Eliminar cualquier blur o filtro */
+    .card, .btn-primary, .btn-secondary, [class*="backdrop-"], [class*="blur"] {
+      -webkit-filter: none !important;
+      filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      backdrop-filter: none !important;
+      -webkit-transform: translate3d(0, 0, 0) !important;
+      transform: translate3d(0, 0, 0) !important;
+    }
+  } 
