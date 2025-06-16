@@ -496,7 +496,7 @@ export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRS
                 </div>
                 
                 {/* Contenedor del escáner QR */}
-                <div className="bg-black rounded-lg overflow-hidden border-2 border-primary-500/50">
+                <div className="bg-black rounded-lg overflow-hidden border-2 border-primary-500/50 qr-scanner-overlay">
                   <div 
                     id="qr-reader"
                     ref={scannerRef}

@@ -418,7 +418,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <Icon className="w-4 h-4" />
                 <span>{label}</span>
                 {id === 'expiring' && expiringCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold shadow-lg border border-red-400 animate-pulse">
                     {expiringCount}
                   </span>
                 )}
@@ -493,7 +493,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   <Icon className="w-5 h-5" />
                   <span>{label}</span>
                   {id === 'expiring' && expiringCount > 0 && (
-                    <span className="ml-auto w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                    <span className="ml-auto w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold shadow-lg border border-red-400 animate-pulse">
                       {expiringCount}
                     </span>
                   )}
@@ -661,7 +661,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   >
                     <Filter className="w-4 h-4" />
                     <span className="hidden sm:inline">Filtros</span>
-                    <span className="text-xs bg-primary-500 text-white px-2 py-1 rounded-full">
+                    <span className="text-xs bg-primary-500 text-white px-2 py-1 rounded-full font-bold shadow-sm">
                       {getActiveFiltersCount()}
                     </span>
                   </button>
