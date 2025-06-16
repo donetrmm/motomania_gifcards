@@ -25,7 +25,7 @@ import {
   Shield
 } from 'lucide-react'
 import { GiftCard, GiftCardStatus } from '@/types/giftcard'
-import { GiftCardService } from '@/lib/giftcard-service'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
 import GiftCardList from './GiftCardList'
 import CreateGiftCardModal from './CreateGiftCardModal'
 import DeleteGiftCardModal from './DeleteGiftCardModal'
@@ -40,6 +40,7 @@ import { ToastContainer, useToast } from './ui/Toast'
 import WelcomeModal from './ui/WelcomeModal'
 
 
+
 interface DashboardProps {
   onLogout: () => void
 }
@@ -48,7 +49,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState('cards')
   const [giftCards, setGiftCards] = useState<GiftCard[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<GiftCardStatus | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Activa' | 'Canjeada' | 'Vencida' | 'Inactiva'>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'giftcard' | 'ewallet'>('all')
 
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all')
@@ -58,17 +59,28 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [showQRScanner, setShowQRScanner] = useState(false)
   const [selectedCard, setSelectedCard] = useState<GiftCard | null>(null)
   const [createType, setCreateType] = useState<'giftcard' | 'ewallet'>('giftcard')
-  const [service] = useState(() => GiftCardService.getInstance())
+  const [service] = useState(() => SupabaseGiftCardService.getInstance())
   const [expiringCount, setExpiringCount] = useState(0)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const toast = useToast()
 
   useEffect(() => {
     loadGiftCards()
+    
+    // Cargar datos del usuario actual
+    const userData = localStorage.getItem('motomania_user')
+    if (userData) {
+      try {
+        setCurrentUser(JSON.parse(userData))
+      } catch (error) {
+        console.error('Error parsing user data:', error)
+      }
+    }
     
     // Verificar si mostrar modal de bienvenida
     const hideWelcome = localStorage.getItem('motomania_hide_welcome')
@@ -126,9 +138,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   useEffect(() => {
     // Actualizar contador de tarjetas próximas a expirar
-    const updateExpiringCount = () => {
-      const expiringCards = service.getExpiringGiftCards(7)
-      setExpiringCount(expiringCards.length)
+    const updateExpiringCount = async () => {
+      try {
+        const expiringCards = await service.getExpiringGiftCardsAsync(7)
+        setExpiringCount(expiringCards.length)
+      } catch (error) {
+        console.error('Error loading expiring cards count:', error)
+        setExpiringCount(0)
+      }
     }
     
     updateExpiringCount()
@@ -137,9 +154,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     return () => clearInterval(interval)
   }, [service, giftCards])
 
-  const loadGiftCards = () => {
-    const cards = service.getAllGiftCards()
-    setGiftCards(cards)
+  const loadGiftCards = async () => {
+    try {
+      const cards = await service.getAllGiftCards()
+      setGiftCards(cards)
+    } catch (error) {
+      console.error('Error loading gift cards:', error)
+      toast.error('Error', 'No se pudieron cargar las tarjetas')
+    }
   }
 
   const handleCreateCard = () => {
@@ -206,43 +228,43 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     filteredCards: filteredCards.length,
     activeCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return status === GiftCardStatus.ACTIVE
+      return status === 'Activa'
     }).length,
     totalValue: giftCards.reduce((sum, card) => sum + card.currentAmount, 0),
     filteredValue: filteredCards.reduce((sum, card) => sum + card.currentAmount, 0),
     redeemedCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return status === GiftCardStatus.REDEEMED
+      return status === 'Canjeada'
     }).length,
     expiredCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return status === GiftCardStatus.EXPIRED
+      return status === 'Vencida'
     }).length,
     inactiveCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return status === GiftCardStatus.INACTIVE
+      return status === 'Inactiva'
     }).length,
     giftCards: giftCards.filter(card => card.type === 'giftcard').length,
     ewallets: giftCards.filter(card => card.type === 'ewallet').length,
     // Valores específicos para tarjetas activas por tipo
     activeGiftCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return card.type === 'giftcard' && status === GiftCardStatus.ACTIVE
+      return card.type === 'giftcard' && status === 'Activa'
     }),
     activeEwallets: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return card.type === 'ewallet' && status === GiftCardStatus.ACTIVE
+      return card.type === 'ewallet' && status === 'Activa'
     }),
     totalValueGiftCards: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return card.type === 'giftcard' && status === GiftCardStatus.ACTIVE
+      return card.type === 'giftcard' && status === 'Activa'
     }).reduce((sum, card) => sum + card.currentAmount, 0),
     totalValueEwallets: giftCards.filter(card => {
       const status = service.getGiftCardStatus(card)
-      return card.type === 'ewallet' && status === GiftCardStatus.ACTIVE
+      return card.type === 'ewallet' && status === 'Activa'
     }).reduce((sum, card) => sum + card.currentAmount, 0),
     averageValue: giftCards.length > 0 ? giftCards.reduce((sum, card) => sum + card.currentAmount, 0) / giftCards.length : 0,
-    redemptionRate: giftCards.length > 0 ? (giftCards.filter(card => service.getGiftCardStatus(card) === GiftCardStatus.REDEEMED).length / giftCards.length) * 100 : 0,
+    redemptionRate: giftCards.length > 0 ? (giftCards.filter(card => service.getGiftCardStatus(card) === 'Canjeada').length / giftCards.length) * 100 : 0,
     totalTransactions: giftCards.reduce((sum, card) => sum + card.transactions.length, 0),
     recentCards: giftCards.filter(card => {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -250,17 +272,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }).length
   }
 
-  const exportData = () => {
+  const exportData = async () => {
     setIsLoading(true)
-    const result = service.exportGiftCards()
-    
-    if (typeof result === 'object' && 'error' in result) {
-      toast.error('Error de exportación', result.error)
-      setIsLoading(false)
-      return
-    }
-    
     try {
+      const result = await service.exportGiftCardsAsync()
+      
+      if (!result) {
+        toast.error('Error de exportación', 'No se pudo generar el archivo de exportación')
+        setIsLoading(false)
+        return
+      }
+      
       const blob = new Blob([result], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -272,6 +294,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       URL.revokeObjectURL(url)
       toast.success('Exportación exitosa', 'Los datos se han exportado correctamente')
     } catch (error) {
+      console.error('Export error:', error)
       toast.error('Error de exportación', 'No se pudo crear el archivo de exportación')
     } finally {
       setIsLoading(false)
@@ -623,8 +646,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                       className="input-field pl-10 pr-16 w-full"
                     />
                                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 hidden sm:flex items-center space-x-1 text-xs text-gray-500">
-                       <kbd className="px-1.5 py-0.5 bg-neutral-700 rounded text-xs">Ctrl</kbd>
-                       <kbd className="px-1.5 py-0.5 bg-neutral-700 rounded text-xs">K</kbd>
+                       <kbd className="px-1.5 py-0.5 bg-neutral-700 rounded text-xs">ALT</kbd>
+                       <kbd className="px-1.5 py-0.5 bg-neutral-700 rounded text-xs">F</kbd>
                      </div>
                   </div>
                   
@@ -685,14 +708,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                          <label className="block text-sm font-medium text-gray-300 mb-2">Estado</label>
                          <select
                            value={statusFilter}
-                           onChange={(e) => setStatusFilter(e.target.value as GiftCardStatus | 'all')}
+                           onChange={(e) => setStatusFilter(e.target.value as 'all' | 'Activa' | 'Canjeada' | 'Vencida' | 'Inactiva')}
                            className="input-field w-full"
                          >
                            <option value="all">Todos los estados</option>
-                           <option value={GiftCardStatus.ACTIVE}>Activas</option>
-                           <option value={GiftCardStatus.REDEEMED}>Canjeadas</option>
-                           <option value={GiftCardStatus.EXPIRED}>Expiradas</option>
-                           <option value={GiftCardStatus.INACTIVE}>Inactivas</option>
+                           <option value="Activa">Activas</option>
+                           <option value="Canjeada">Canjeadas</option>
+                           <option value="Vencida">Expiradas</option>
+                           <option value="Inactiva">Inactivas</option>
                          </select>
                        </div>
 
@@ -791,11 +814,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             animate={{ opacity: 1, y: 0 }}
           >
             <QRScanner 
-              onScanSuccess={(data) => {
-                // Manejar resultado del escaneo
-                // Tarjeta escaneada exitosamente
-              }}
-              onViewDetails={(giftCard) => setSelectedCard(giftCard)}
+              isOpen={true}
+              onClose={() => setActiveTab('overview')}
+              onCardFound={(giftCard) => setSelectedCard(giftCard)}
+              onError={(error) => console.error('Error en scanner:', error)}
             />
           </motion.div>
         )}
@@ -1153,6 +1175,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </motion.div>
           </motion.div>
         )}
+
+
       </main>
 
       {/* Modals */}

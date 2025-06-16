@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, User, Mail, Phone, DollarSign, Calendar, FileText } from 'lucide-react'
-import { GiftCardFormData } from '@/types/giftcard'
-import { GiftCardService } from '@/lib/giftcard-service'
+import { X, User, Mail, Phone, DollarSign, Calendar, FileText, Gift, Wallet } from 'lucide-react'
+import { GiftCard, GiftCardFormData } from '@/types/giftcard'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
+import { DataSanitizer } from '@/lib/sanitizer'
+import { RateLimiter } from '@/lib/rate-limiter'
+import { DateUtils } from '@/lib/config'
 
 interface CreateGiftCardModalProps {
   type: 'giftcard' | 'ewallet'
@@ -14,14 +17,18 @@ interface CreateGiftCardModalProps {
 
 export default function CreateGiftCardModal({ type, onClose, onSuccess }: CreateGiftCardModalProps) {
   const [formData, setFormData] = useState<GiftCardFormData>({
+    type: type,
     ownerName: '',
     ownerEmail: '',
     ownerPhone: '',
     initialAmount: type === 'ewallet' ? 0 : 0,
+    expiresAt: undefined,
     notes: ''
   })
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [createdCard, setCreatedCard] = useState<GiftCard | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
 
   // Prevenir scroll del body y auto-scroll al modal
   useEffect(() => {
@@ -92,8 +99,8 @@ export default function CreateGiftCardModal({ type, onClose, onSuccess }: Create
     setIsLoading(true)
     
     try {
-      const service = GiftCardService.getInstance()
-      const result = service.createGiftCard({ ...formData, type })
+      const service = SupabaseGiftCardService.getInstance()
+      const result = await service.createGiftCard({ ...formData, type })
       
       // Verificar si hay error
       if (typeof result === 'object' && 'error' in result) {
@@ -101,15 +108,28 @@ export default function CreateGiftCardModal({ type, onClose, onSuccess }: Create
         return
       }
       
-      // Simular delay para UX
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Tarjeta creada exitosamente
+      setCreatedCard(result as GiftCard)
+      setShowSuccess(true)
       
+      // Llamar onSuccess para actualizar la lista en el Dashboard
       onSuccess()
+      
+      // Cerrar modal después de 3 segundos o cuando el usuario haga clic
+      setTimeout(() => {
+        onClose()
+      }, 3000)
+      
     } catch (error) {
       setErrors({ general: 'Error inesperado al crear la tarjeta' })
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleSuccessClose = () => {
+    onSuccess()
+    onClose()
   }
 
   const handleChange = (field: keyof GiftCardFormData, value: string | number | Date) => {
@@ -268,9 +288,9 @@ export default function CreateGiftCardModal({ type, onClose, onSuccess }: Create
                     <Calendar className="absolute left-3 top-1/3 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <input
                       type="date"
-                      min={new Date().toISOString().split('T')[0]}
-                      value={formData.expiresAt ? formData.expiresAt.toISOString().split('T')[0] : ''}
-                      onChange={(e) => handleChange('expiresAt', e.target.value ? new Date(e.target.value) : undefined as any)}
+                      min={DateUtils.toMexicoISOString().split('T')[0]}
+                      value={formData.expiresAt ? DateUtils.toMexicoISOString(formData.expiresAt).split('T')[0] : ''}
+                      onChange={(e) => handleChange('expiresAt', e.target.value ? DateUtils.toMexicoTime(new Date(e.target.value)) : undefined as any)}
                       className="input-field pl-10"
                     />
                   </div>
@@ -343,9 +363,90 @@ export default function CreateGiftCardModal({ type, onClose, onSuccess }: Create
                 )}
               </button>
             </div>
-                    </form>
+          </form>
         </motion.div>
       </div>
+
+      {showSuccess && createdCard && (
+        <div className="fixed bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-2 sm:p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="bg-neutral-800 rounded-2xl shadow-2xl w-full max-w-2xl h-[95vh] sm:max-h-[90vh] flex flex-col border border-neutral-700/50 overflow-hidden"
+          >
+            <div className="sticky top-0 z-50 bg-neutral-800 rounded-t-2xl border-b border-neutral-700 px-6 py-4 flex items-center justify-between shadow-lg">
+              <h2 className="text-2xl font-bold text-gray-100">
+                GiftCard Creada Exitosamente
+              </h2>
+              <button
+                onClick={handleSuccessClose}
+                className="p-2 hover:bg-neutral-700 rounded-full transition-colors text-gray-300 hover:text-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 pt-6 sm:pt-8 space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-100 flex items-center space-x-2">
+                  <DollarSign className="w-5 h-5 text-secondary-400" />
+                  <span>Información de la Tarjeta</span>
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Código de la GiftCard
+                    </label>
+                    <input
+                      type="text"
+                      value={createdCard.code}
+                      className="input-field"
+                      readOnly
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Monto Inicial
+                    </label>
+                    <input
+                      type="text"
+                      value={createdCard.initialAmount.toString()}
+                      className="input-field"
+                      readOnly
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Fecha de Vencimiento
+                  </label>
+                  <input
+                    type="text"
+                    value={createdCard.expiresAt ? createdCard.expiresAt.toISOString().split('T')[0] : ''}
+                    className="input-field"
+                    readOnly
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Notas
+                </label>
+                <textarea
+                  value={createdCard.notes}
+                  className="input-field pl-10 min-h-[100px] resize-y"
+                  readOnly
+                />
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </AnimatePresence>
   )
 } 

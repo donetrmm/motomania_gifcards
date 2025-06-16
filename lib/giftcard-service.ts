@@ -225,7 +225,7 @@ export class GiftCardService {
     const transaction: Transaction = {
       id: crypto.randomUUID(),
       giftCardId: id,
-      type: sanitizedAmount < oldAmount ? 'redemption' : 'refund',
+      type: sanitizedAmount < oldAmount ? 'usage' : 'refund',
       amount: Math.abs(sanitizedAmount - oldAmount),
       description: sanitizedDescription,
       timestamp: new Date(),

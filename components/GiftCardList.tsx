@@ -2,9 +2,9 @@
 
 import { motion } from 'framer-motion'
 import { Eye, Edit, Trash2, CreditCard, Calendar, DollarSign, User } from 'lucide-react'
-import { GiftCard, GiftCardStatus } from '@/types/giftcard'
-import { GiftCardService } from '@/lib/giftcard-service'
-import { deobfuscateCode } from '@/lib/auth'
+import { GiftCard } from '@/types/giftcard'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
+
 
 interface GiftCardListProps {
   giftCards: GiftCard[]
@@ -14,50 +14,40 @@ interface GiftCardListProps {
 }
 
 export default function GiftCardList({ giftCards, onCardSelect, onCardUpdate, onCardDelete }: GiftCardListProps) {
-  const service = GiftCardService.getInstance()
+  const service = SupabaseGiftCardService.getInstance()
 
-  const getStatusColor = (status: GiftCardStatus) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case GiftCardStatus.ACTIVE:
+      case 'Activa':
         return 'bg-green-900/30 text-green-400 border-green-500/50'
-      case GiftCardStatus.REDEEMED:
+      case 'Sin saldo':
         return 'bg-red-900/30 text-red-400 border-red-500/50'
-      case GiftCardStatus.EXPIRED:
+      case 'Vencida':
         return 'bg-yellow-900/30 text-yellow-400 border-yellow-500/50'
-      case GiftCardStatus.INACTIVE:
+      case 'Inactiva':
         return 'bg-neutral-700/50 text-gray-300 border-neutral-600'
       default:
         return 'bg-neutral-700/50 text-gray-300 border-neutral-600'
     }
   }
 
-  const getStatusLabel = (status: GiftCardStatus) => {
-    switch (status) {
-      case GiftCardStatus.ACTIVE:
-        return 'Activa'
-      case GiftCardStatus.REDEEMED:
-        return 'Canjeada'
-      case GiftCardStatus.EXPIRED:
-        return 'Expirada'
-      case GiftCardStatus.INACTIVE:
-        return 'Inactiva'
-      default:
-        return 'Desconocido'
-    }
+  const getStatusLabel = (status: string) => {
+    return status // El servicio ya devuelve el label correcto
   }
 
   const handleQuickAction = async (card: GiftCard, action: 'deactivate' | 'reactivate') => {
-    if (action === 'deactivate') {
-      service.deactivateGiftCard(card.id)
-    } else {
-      // Reactivar tarjeta
-      const updatedCard = service.getGiftCardById(card.id)
-      if (updatedCard) {
-        updatedCard.isActive = true
-        updatedCard.updatedAt = new Date()
+    try {
+      if (action === 'deactivate') {
+        await service.deactivateGiftCard(card.id)
+      } else {
+        // Reactivar tarjeta - necesitamos implementar este método en el servicio
+        const updatedCard = { ...card, isActive: true, updatedAt: new Date() }
+        await service.updateGiftCard(card.id, updatedCard)
       }
+      onCardUpdate()
+    } catch (error) {
+      console.error('Error performing quick action:', error)
     }
-    onCardUpdate()
   }
 
   if (giftCards.length === 0) {
@@ -125,7 +115,7 @@ export default function GiftCardList({ giftCards, onCardSelect, onCardUpdate, on
                     <div className="flex items-center space-x-1">
                       <CreditCard className="w-4 h-4 flex-shrink-0" />
                       <span className="font-mono text-xs sm:text-sm leading-tight mobile-crisp ultra-crisp" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {deobfuscateCode(card.code)}
+                        {service.deobfuscateCode(card.code)}
                       </span>
                     </div>
                     

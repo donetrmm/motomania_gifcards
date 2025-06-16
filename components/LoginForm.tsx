@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Lock, User, Eye, EyeOff, Zap } from 'lucide-react'
-import { authenticateUser, createSecureSession } from '@/lib/auth'
+import { createSecureSession } from '@/lib/auth'
 import MotomaniaLogo from './MotomaniaLogo'
 
 interface LoginFormProps {
@@ -27,17 +27,30 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
     setIsLoading(true)
     setError('')
 
-    // Simular delay de autenticación
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    try {
+      // Usar API route para autenticación
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      })
 
-    const authResult = authenticateUser(username, password)
-    
-    if (authResult.success) {
-      const { session } = createSecureSession()
-      localStorage.setItem('motomania_session', session)
-      onLogin(session)
-    } else {
-      setError(authResult.message || 'Error de autenticación')
+      const authResult = await response.json()
+      
+      if (authResult.success && authResult.user) {
+        // Crear sesión local para compatibilidad
+        const { session } = createSecureSession()
+        localStorage.setItem('motomania_session', session)
+        localStorage.setItem('motomania_user', JSON.stringify(authResult.user))
+        onLogin(session)
+      } else {
+        setError(authResult.error || 'Error de autenticación')
+      }
+    } catch (error) {
+      console.error('Error during authentication:', error)
+      setError('Error de conexión. Verifica tu configuración de Supabase.')
     }
 
     setIsLoading(false)

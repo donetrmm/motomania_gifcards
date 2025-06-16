@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, AlertTriangle, Power } from 'lucide-react'
 import { GiftCard } from '@/types/giftcard'
-import { GiftCardService } from '@/lib/giftcard-service'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
 import { useToast } from '@/components/ui/Toast'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 
@@ -25,7 +25,7 @@ export default function DeleteGiftCardModal({
   const [step, setStep] = useState(1) // 1: Advertencia, 2: Confirmación
   const [action, setAction] = useState<'delete' | 'deactivate'>('delete')
   const { addToast } = useToast()
-  const service = GiftCardService.getInstance()
+  const service = SupabaseGiftCardService.getInstance()
 
   // Prevenir scroll del body y configurar modal
   useEffect(() => {
@@ -57,9 +57,6 @@ export default function DeleteGiftCardModal({
 
   if (!isOpen || !giftCard) return null
 
-  const expectedCode = service.getDeleteConfirmationCode(giftCard.id)
-  const confirmationCodeNeeded = typeof expectedCode === 'string' ? expectedCode : ''
-
   const handleClose = () => {
     if (!isDeleting) {
       setStep(1)
@@ -87,7 +84,7 @@ export default function DeleteGiftCardModal({
     try {
       if (action === 'deactivate') {
         // Desactivar tarjeta
-        const result = service.deactivateGiftCard(giftCard.id)
+        const result = await service.deactivateGiftCard(giftCard.id)
         
         if (!result) {
           addToast({
@@ -102,29 +99,20 @@ export default function DeleteGiftCardModal({
         addToast({
           type: 'success',
           title: 'Tarjeta desactivada correctamente',
-                      message: `La tarjeta de ${giftCard.ownerName} ha sido desactivada. Se puede reactivar más tarde.`
+          message: `La tarjeta de ${giftCard.ownerName} ha sido desactivada. Se puede reactivar más tarde.`
         })
 
         onDeleted?.()
         handleClose()
       } else {
-        // Eliminar permanentemente
-        if (confirmationCode !== confirmationCodeNeeded) {
-          addToast({
-            type: 'error',
-            title: 'Código incorrecto',
-            message: `Debe escribir exactamente: ${confirmationCodeNeeded}`
-          })
-          return
-        }
+        // Eliminar permanentemente usando el método correcto
+        const result = await service.deleteGiftCard(giftCard.id)
 
-        const result = service.permanentlyDeleteGiftCard(giftCard.id, confirmationCode)
-
-        if (typeof result === 'object' && result.error) {
+        if (!result) {
           addToast({
             type: 'error',
             title: 'Error al eliminar',
-            message: result.error
+            message: 'No se pudo eliminar la tarjeta'
           })
           return
         }
@@ -132,7 +120,7 @@ export default function DeleteGiftCardModal({
         addToast({
           type: 'success',
           title: 'Tarjeta eliminada',
-                      message: `La tarjeta de ${giftCard.ownerName} ha sido eliminada permanentemente`
+          message: `La tarjeta de ${giftCard.ownerName} ha sido eliminada permanentemente`
         })
 
         onDeleted?.()
@@ -142,7 +130,7 @@ export default function DeleteGiftCardModal({
       addToast({
         type: 'error',
         title: 'Error inesperado',
-                    message: `Ocurrió un error al ${action === 'delete' ? 'eliminar' : 'desactivar'} la tarjeta`
+        message: `Ocurrió un error al ${action === 'delete' ? 'eliminar' : 'desactivar'} la tarjeta`
       })
     } finally {
       setIsDeleting(false)
@@ -286,7 +274,7 @@ export default function DeleteGiftCardModal({
 
               <div className="bg-neutral-700/50 rounded-lg p-4 text-center">
                 <code className="text-lg font-mono font-bold text-red-400">
-                  {confirmationCodeNeeded}
+                  {service.getDeleteConfirmationCode(giftCard.id)}
                 </code>
               </div>
 
@@ -298,7 +286,7 @@ export default function DeleteGiftCardModal({
                   type="text"
                   value={confirmationCode}
                   onChange={(e) => setConfirmationCode(e.target.value.toUpperCase())}
-                  placeholder={confirmationCodeNeeded}
+                  placeholder={service.getDeleteConfirmationCode(giftCard.id)}
                   className="w-full px-3 py-2 border border-neutral-600 bg-neutral-700 text-gray-100 rounded-md font-mono text-center text-lg tracking-wider focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   disabled={isDeleting}
                   autoFocus
@@ -348,7 +336,7 @@ export default function DeleteGiftCardModal({
                 </button>
               <button
                 onClick={handleExecuteAction}
-                disabled={isDeleting || confirmationCode !== confirmationCodeNeeded}
+                disabled={isDeleting || confirmationCode !== service.getDeleteConfirmationCode(giftCard.id)}
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center space-x-2"
               >
                 {isDeleting ? (

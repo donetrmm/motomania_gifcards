@@ -4,7 +4,7 @@ import { forwardRef } from 'react'
 import { motion } from 'framer-motion'
 import { Download, Zap, Gift } from 'lucide-react'
 import { GiftCard } from '@/types/giftcard'
-import { deobfuscateCode } from '@/lib/auth'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
 import MotomaniaLogo from './MotomaniaLogo'
 
 interface GiftCardDesignProps {
@@ -16,7 +16,8 @@ interface GiftCardDesignProps {
 
 const GiftCardDesign = forwardRef<HTMLDivElement, GiftCardDesignProps>(
   ({ giftCard, qrCodeUrl, onExport, isExporting }, ref) => {
-    const code = deobfuscateCode(giftCard.code)
+    const service = SupabaseGiftCardService.getInstance()
+    const code = service.deobfuscateCode(giftCard.code)
 
     return (
       <div className="space-y-6">

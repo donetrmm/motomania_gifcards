@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Upload, FileText, AlertCircle, CheckCircle, X } from 'lucide-react'
 import { GiftCard } from '@/types/giftcard'
-import { GiftCardService } from '@/lib/giftcard-service'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
 
 interface ImportCardsProps {
   onImportSuccess: () => void
@@ -22,7 +22,7 @@ export default function ImportCards({ onImportSuccess }: ImportCardsProps) {
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const service = GiftCardService.getInstance()
+  const service = SupabaseGiftCardService.getInstance()
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -69,28 +69,12 @@ export default function ImportCards({ onImportSuccess }: ImportCardsProps) {
       const data = JSON.parse(text)
       
       // Validar estructura del archivo
-      if (!data.giftCards || !Array.isArray(data.giftCards)) {
-        throw new Error('El archivo debe contener un array "giftCards"')
+      if (!data.giftCards && !Array.isArray(data)) {
+        throw new Error('El archivo debe contener un array "giftCards" o ser un array directo')
       }
 
-      // Si es un archivo de exportación completa, usar el método de importación del servicio
-      if (data.transactions && data.version) {
-        const success = service.importGiftCards(text)
-        if (success) {
-          setImportResult({
-            success: true,
-            imported: data.giftCards.length,
-            errors: [],
-            duplicates: 0
-          })
-          onImportSuccess()
-          return
-        } else {
-          throw new Error('Error al importar el archivo de exportación completa')
-        }
-      }
-
-      const result = await importGiftCards(data.giftCards)
+      const cards = data.giftCards || data
+      const result = await importGiftCards(cards)
       setImportResult(result)
       
       if (result.success && result.imported > 0) {
@@ -118,14 +102,14 @@ export default function ImportCards({ onImportSuccess }: ImportCardsProps) {
       
       try {
         // Validar campos requeridos
-        if (!cardData.ownerName || !cardData.initialAmount) {
+        if (!cardData.ownerName || (!cardData.initialAmount && cardData.type !== 'ewallet')) {
           errors.push(`Tarjeta ${i + 1}: Faltan campos requeridos (ownerName, initialAmount)`)
           continue
         }
 
         // Verificar si ya existe una tarjeta con el mismo código
         if (cardData.code) {
-          const existingCard = service.getAllGiftCards().find(c => c.code === cardData.code)
+          const existingCard = await service.findGiftCardByCode(cardData.code)
           if (existingCard) {
             duplicates++
             continue
@@ -133,24 +117,19 @@ export default function ImportCards({ onImportSuccess }: ImportCardsProps) {
         }
 
         // Crear la tarjeta
-        const newCard = service.createGiftCard({
+        const newCard = await service.createGiftCard({
           type: cardData.type || 'giftcard',
           ownerName: cardData.ownerName,
-          ownerEmail: cardData.ownerEmail,
-          ownerPhone: cardData.ownerPhone,
-          initialAmount: Number(cardData.initialAmount),
+          ownerEmail: cardData.ownerEmail || '',
+          ownerPhone: cardData.ownerPhone || '',
+          initialAmount: Number(cardData.initialAmount) || 0,
           expiresAt: cardData.expiresAt ? new Date(cardData.expiresAt) : undefined,
-          notes: cardData.notes
+          notes: cardData.notes || ''
         })
 
         // Verificar que la creación fue exitosa
         if (typeof newCard === 'object' && 'error' in newCard) {
           throw new Error(newCard.error)
-        }
-
-        // Si se especifica un código personalizado, actualizarlo
-        if (cardData.code && cardData.code !== newCard.code) {
-          newCard.code = cardData.code
         }
 
         imported++

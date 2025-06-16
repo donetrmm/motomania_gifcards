@@ -1,157 +1,224 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { QrCode, Camera, Search, AlertCircle, CheckCircle, X, StopCircle } from 'lucide-react'
-import { GiftCardService } from '@/lib/giftcard-service'
 import { GiftCard } from '@/types/giftcard'
-import QrScanner from 'qr-scanner'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
+
+// Importar html5-qrcode dinámicamente para evitar problemas de SSR
+let Html5QrcodeScanner: any = null
+let Html5Qrcode: any = null
 
 interface QRScannerProps {
-  onScanSuccess: (data: any) => void
-  onViewDetails?: (giftCard: GiftCard) => void
+  isOpen: boolean
+  onClose: () => void
+  onCardFound: (card: GiftCard) => void
+  onError?: (error: string) => void
 }
 
-export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerProps) {
+export default function QRScanner({ isOpen, onClose, onCardFound, onError }: QRScannerProps) {
   const [isScanning, setIsScanning] = useState(false)
   const [manualCode, setManualCode] = useState('')
   const [scanResult, setScanResult] = useState<GiftCard | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<'manual' | 'camera'>('manual')
   const [hasCamera, setHasCamera] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [isLibraryLoaded, setIsLibraryLoaded] = useState(false)
+  const [qrScanner, setQrScanner] = useState<any>(null)
   
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const qrScannerRef = useRef<QrScanner | null>(null)
-  
-  const service = GiftCardService.getInstance()
+  const service = SupabaseGiftCardService.getInstance()
+  const scannerRef = useRef<HTMLDivElement>(null)
 
-  // Verificar si hay cámara disponible
+  // Cargar la librería html5-qrcode dinámicamente
   useEffect(() => {
-    QrScanner.hasCamera().then(setHasCamera)
-  }, [])
-
-  // Cleanup del scanner al desmontar
-  useEffect(() => {
-    return () => {
-      if (qrScannerRef.current) {
-        qrScannerRef.current.stop()
-        qrScannerRef.current.destroy()
+    const loadQRLibrary = async () => {
+      try {
+        const { Html5QrcodeScanner: Scanner, Html5Qrcode: QrCode } = await import('html5-qrcode')
+        Html5QrcodeScanner = Scanner
+        Html5Qrcode = QrCode
+        setIsLibraryLoaded(true)
+      } catch (error) {
+        console.error('Error loading QR library:', error)
+        setError('Error al cargar la librería de escaneo QR')
       }
+    }
+
+    if (typeof window !== 'undefined') {
+      loadQRLibrary()
     }
   }, [])
 
-  const handleManualSearch = () => {
+  // Verificar si hay cámara disponible
+  useEffect(() => {
+    const checkCamera = async () => {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          await navigator.mediaDevices.getUserMedia({ video: true })
+          setHasCamera(true)
+        } catch (error) {
+          console.error('No camera access:', error)
+          setHasCamera(false)
+        }
+      } else {
+        setHasCamera(false)
+      }
+    }
+
+    checkCamera()
+  }, [])
+
+  // Limpiar escáner al cerrar
+  useEffect(() => {
+    if (!isOpen && qrScanner) {
+      stopScanning()
+    }
+  }, [isOpen])
+
+  const handleManualSearch = async () => {
     if (!manualCode.trim()) {
       setError('Ingresa un código válido')
       return
     }
 
-    setError('')
+    setError(null)
     setScanResult(null)
+    setIsSearching(true)
     
     try {
-      // Buscar por código desobfuscado
-      const allCards = service.getAllGiftCards()
-      const card = allCards.find(c => {
-        const deobfuscatedCode = service.deobfuscateCode(c.code)
-        return deobfuscatedCode === manualCode.trim() || c.code === manualCode.trim()
-      })
+      const card = await service.findGiftCardByCode(manualCode.trim())
       
       if (card) {
         setScanResult(card)
-        onScanSuccess(card)
+        onCardFound(card)
       } else {
         setError('Código no encontrado. Verifica que el código sea correcto.')
       }
     } catch (error) {
+      console.error('Error searching card:', error)
       setError('Error al buscar la tarjeta')
+    } finally {
+      setIsSearching(false)
     }
   }
 
-  const handleScanQR = async () => {
+  const onScanSuccess = async (decodedText: string, decodedResult: any) => {
+    console.log('QR Code scanned:', decodedText)
+    
+    // Detener el escáner
+    stopScanning()
+    
+    setError(null)
+    setScanResult(null)
+    setIsSearching(true)
+    
+    try {
+      // Buscar la tarjeta por el código escaneado
+      const card = await service.findGiftCardByCode(decodedText.trim())
+      
+      if (card) {
+        setScanResult(card)
+        onCardFound(card)
+      } else {
+        setError(`Código "${decodedText}" no encontrado en el sistema.`)
+      }
+    } catch (error) {
+      console.error('Error processing scanned code:', error)
+      setError('Error al procesar el código escaneado')
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const onScanFailure = (error: string) => {
+    // No hacer nada en caso de error de escaneo (es normal)
+    // console.warn('QR Scan error:', error)
+  }
+
+  const startScanning = () => {
+    if (!isLibraryLoaded || !Html5QrcodeScanner || !hasCamera) {
+      setError('Escáner QR no disponible')
+      return
+    }
+
+    setError(null)
+    setIsScanning(true)
+
+    // Esperar un momento para que el DOM esté listo
+    setTimeout(() => {
+      try {
+        // Verificar que el elemento existe
+        const qrReaderElement = document.getElementById('qr-reader')
+        if (!qrReaderElement) {
+          throw new Error('Elemento qr-reader no encontrado en el DOM')
+        }
+
+        const scanner = new Html5QrcodeScanner(
+          "qr-reader",
+          { 
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            showTorchButtonIfSupported: true,
+            showZoomSliderIfSupported: true,
+            defaultZoomValueIfSupported: 1,
+          },
+          false // verbose logging
+        )
+
+        scanner.render(onScanSuccess, onScanFailure)
+        setQrScanner(scanner)
+      } catch (error) {
+        console.error('Error starting QR scanner:', error)
+        setError('Error al iniciar el escáner QR. Intenta de nuevo.')
+        setIsScanning(false)
+      }
+    }, 100) // Delay de 100ms para que el DOM esté listo
+  }
+
+  const stopScanning = () => {
+    if (qrScanner) {
+      try {
+        qrScanner.clear()
+        setQrScanner(null)
+      } catch (error) {
+        console.error('Error stopping scanner:', error)
+      }
+    }
+    setIsScanning(false)
+  }
+
+  const handleScanQR = () => {
     if (!hasCamera) {
       setError('No se detectó cámara en este dispositivo')
       return
     }
 
+    if (!isLibraryLoaded) {
+      setError('Librería de escaneo QR aún no está cargada')
+      return
+    }
+
     setMode('camera')
-    setIsScanning(true)
-    setError('')
-    setScanResult(null)
-    
-    try {
-      if (videoRef.current) {
-        // Crear el scanner QR
-        qrScannerRef.current = new QrScanner(
-          videoRef.current,
-          (result) => {
-            // Resultado del QR escaneado
-            try {
-              // Intentar parsear como JSON (datos QR generados por la app)
-              let qrData
-              try {
-                qrData = JSON.parse(result.data)
-              } catch {
-                // Si no es JSON, asumir que es un código directo
-                qrData = { code: result.data }
-              }
-
-              // Buscar la tarjeta
-              const allCards = service.getAllGiftCards()
-              let foundCard = null
-
-              if (qrData.cardId) {
-                // Buscar por ID si está disponible
-                foundCard = service.getGiftCardById(qrData.cardId)
-              } else if (qrData.code) {
-                // Buscar por código
-                foundCard = allCards.find(c => {
-                  const deobfuscatedCode = service.deobfuscateCode(c.code)
-                  return deobfuscatedCode === qrData.code || c.code === qrData.code
-                })
-              }
-
-              if (foundCard) {
-                setScanResult(foundCard)
-                onScanSuccess(foundCard)
-                stopScanning()
-              } else {
-                setError('Tarjeta no encontrada en el sistema')
-                stopScanning()
-              }
-            } catch (err) {
-              setError('Error al procesar el código QR')
-              stopScanning()
-            }
-          },
-          {
-            preferredCamera: 'environment', // Usar cámara trasera si está disponible
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-          }
-        )
-
-        await qrScannerRef.current.start()
-      }
-    } catch (error: any) {
-      setError(`Error al iniciar la cámara: ${error.message || 'Permisos denegados'}`)
-      setIsScanning(false)
-    }
-  }
-
-  const stopScanning = () => {
-    if (qrScannerRef.current) {
-      qrScannerRef.current.stop()
-    }
-    setIsScanning(false)
+    // Esperar a que el DOM se actualice antes de iniciar el escáner
+    setTimeout(() => {
+      startScanning()
+    }, 200)
   }
 
   const resetScanner = () => {
     stopScanning()
     setScanResult(null)
-    setError('')
+    setError(null)
     setManualCode('')
     setMode('manual')
+    setIsScanning(false)
+  }
+
+  const handleClose = () => {
+    resetScanner()
+    onClose()
   }
 
   return (
@@ -173,7 +240,10 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
       {/* Selector de modo */}
       <div className="flex rounded-lg border border-neutral-600 p-1 bg-neutral-800/50">
         <button
-          onClick={() => setMode('manual')}
+          onClick={() => {
+            if (mode === 'camera') stopScanning()
+            setMode('manual')
+          }}
           className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md font-medium transition-colors ${
             mode === 'manual'
               ? 'bg-neutral-700 text-primary-400 shadow-sm'
@@ -186,19 +256,20 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
         
         <button
           onClick={() => setMode('camera')}
-          disabled={!hasCamera}
+          disabled={!hasCamera || !isLibraryLoaded}
           className={`flex-1 flex items-center justify-center space-x-2 py-2 px-4 rounded-md font-medium transition-colors ${
             mode === 'camera'
               ? 'bg-neutral-700 text-primary-400 shadow-sm'
               : 'text-gray-300 hover:text-gray-100'
-          } ${!hasCamera ? 'opacity-50 cursor-not-allowed' : ''}`}
+          } ${(!hasCamera || !isLibraryLoaded) ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <Camera className="w-4 h-4" />
           <span>Escanear QR</span>
         </button>
       </div>
 
-      {!hasCamera && mode === 'camera' && (
+      {/* Alertas */}
+      {!hasCamera && (
         <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4">
           <p className="text-yellow-300 text-sm">
             <AlertCircle className="w-4 h-4 inline mr-2" />
@@ -206,6 +277,57 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
           </p>
         </div>
       )}
+
+      {!isLibraryLoaded && mode === 'camera' && (
+        <div className="bg-blue-900/30 border border-blue-500/50 rounded-lg p-4">
+          <p className="text-blue-300 text-sm">
+            <AlertCircle className="w-4 h-4 inline mr-2" />
+            Cargando librería de escaneo QR...
+          </p>
+        </div>
+      )}
+
+      {/* Mensajes de error */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-red-900/30 border border-red-500/50 rounded-lg p-4"
+          >
+            <p className="text-red-300 text-sm">
+              <AlertCircle className="w-4 h-4 inline mr-2" />
+              {error}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Resultado del escaneo */}
+      <AnimatePresence>
+        {scanResult && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-green-900/30 border border-green-500/50 rounded-lg p-6"
+          >
+            <div className="flex items-start space-x-3">
+              <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-green-300 font-semibold mb-2">¡Tarjeta encontrada!</h3>
+                <div className="space-y-2 text-sm">
+                  <p><strong>Código:</strong> {service.deobfuscateCode(scanResult.code)}</p>
+                  <p><strong>Propietario:</strong> {scanResult.ownerName}</p>
+                  <p><strong>Saldo:</strong> ${scanResult.currentAmount.toFixed(2)}</p>
+                  <p><strong>Estado:</strong> {service.getGiftCardStatus(scanResult)}</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Contenido principal */}
       <div className="card">
@@ -224,16 +346,17 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
                   type="text"
                   value={manualCode}
                   onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                  className="input-field flex-1"
-                  placeholder="MM123456789"
+                  className="input-field flex-1 font-mono"
+                  placeholder="MM241201123456ABCD"
                   onKeyPress={(e) => e.key === 'Enter' && handleManualSearch()}
+                  disabled={isSearching}
                 />
                 <button
                   onClick={handleManualSearch}
                   className="btn-primary px-6"
-                  disabled={!manualCode.trim()}
+                  disabled={!manualCode.trim() || isSearching}
                 >
-                  Buscar
+                  {isSearching ? 'Buscando...' : 'Buscar'}
                 </button>
               </div>
             </div>
@@ -244,74 +367,56 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
           </motion.div>
         )}
 
-        {mode === 'camera' && hasCamera && (
+        {mode === 'camera' && (
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="text-center space-y-4"
+            className="space-y-4"
           >
-            {!isScanning && !scanResult && (
-              <div className="space-y-4">
+            {!isScanning && hasCamera && isLibraryLoaded && (
+              <div className="text-center space-y-4">
                 <div className="w-32 h-32 border-4 border-dashed border-neutral-600 rounded-lg flex items-center justify-center mx-auto">
                   <Camera className="w-16 h-16 text-gray-400" />
                 </div>
                 
-                <div>
-                  <button
-                    onClick={handleScanQR}
-                    className="btn-primary flex items-center space-x-2 mx-auto"
-                  >
-                    <QrCode className="w-5 h-5" />
-                    <span>Iniciar Escáner</span>
-                  </button>
-                  <p className="text-sm text-gray-400 mt-2">
-                    Haz clic para activar la cámara y escanear el código QR
-                  </p>
-                </div>
+                <button
+                  onClick={handleScanQR}
+                  className="btn-primary flex items-center space-x-2 mx-auto"
+                >
+                  <QrCode className="w-5 h-5" />
+                  <span>Iniciar Escáner QR</span>
+                </button>
+                
+                <p className="text-sm text-gray-400">
+                  Posiciona el código QR dentro del marco para escanearlo
+                </p>
               </div>
             )}
 
             {isScanning && (
               <div className="space-y-4">
-                <div className="relative w-full max-w-sm mx-auto">
-                  <video
-                    ref={videoRef}
-                    className="w-full h-64 bg-black rounded-lg object-cover"
-                    playsInline
-                    muted
-                  />
-                  
-                  {/* Overlay de escaneado */}
-                  <div className="absolute inset-0 border-4 border-primary-500 rounded-lg pointer-events-none">
-                    <div className="absolute inset-4 border-2 border-white/50 rounded-lg"></div>
-                  </div>
-                  
-                  {/* Línea de escaneo animada */}
-                  <motion.div
-                    initial={{ y: 20 }}
-                    animate={{ y: 240 }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      ease: 'linear'
-                    }}
-                    className="absolute left-4 right-4 h-0.5 bg-primary-400 shadow-lg"
-                  />
-                </div>
-                
-                <div>
-                  <p className="font-medium text-gray-100">Escaneando...</p>
-                  <p className="text-sm text-gray-300 mb-3">
-                    Mantén el código QR dentro del marco
-                  </p>
-                  
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-200">Escaneando...</h3>
                   <button
                     onClick={stopScanning}
-                    className="btn-secondary flex items-center space-x-2 mx-auto"
+                    className="btn-secondary flex items-center space-x-2"
                   >
                     <StopCircle className="w-4 h-4" />
                     <span>Detener</span>
                   </button>
+                </div>
+                
+                {/* Contenedor del escáner QR */}
+                <div 
+                  id="qr-reader"
+                  ref={scannerRef}
+                  className="w-full max-w-md mx-auto bg-black rounded-lg overflow-hidden"
+                  style={{ minHeight: '300px' }}
+                />
+                
+                <div className="text-center text-sm text-gray-400">
+                  <p>Apunta la cámara hacia el código QR de la tarjeta</p>
+                  <p>El escaneo se realizará automáticamente</p>
                 </div>
               </div>
             )}
@@ -319,110 +424,21 @@ export default function QRScanner({ onScanSuccess, onViewDetails }: QRScannerPro
         )}
       </div>
 
-      {/* Resultado del escaneo */}
-      {scanResult && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-neutral-800 rounded-xl shadow-lg border border-green-500/50 p-6"
+      {/* Botones de acción */}
+      <div className="flex justify-between">
+        <button
+          onClick={resetScanner}
+          className="btn-secondary"
+          disabled={isSearching}
         >
-          <div className="flex items-start space-x-4">
-            <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="w-6 h-6 text-white" />
-            </div>
-            
-            <div className="flex-1">
-              <h3 className="font-semibold text-green-400 mb-2">¡Tarjeta Encontrada!</h3>
-              
-              <div className="space-y-2 text-sm">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-green-300 font-medium">Propietario:</span>
-                    <p className="text-gray-100">{scanResult.ownerName}</p>
-                  </div>
-                  
-                  <div>
-                    <span className="text-green-300 font-medium">Saldo:</span>
-                    <p className="text-gray-100 font-bold">
-                      ${scanResult.currentAmount.toLocaleString()}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <span className="text-green-300 font-medium">Código:</span>
-                    <p className="text-gray-100 font-mono">
-                      {service.deobfuscateCode(scanResult.code)}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <span className="text-green-300 font-medium">Estado:</span>
-                    <p className="text-gray-100">
-                      {scanResult.isActive ? 'Activa' : 'Inactiva'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex space-x-3 mt-4">
-                <button
-                  className="btn-primary text-sm"
-                  onClick={() => {
-                    if (onViewDetails && scanResult) {
-                      onViewDetails(scanResult)
-                    }
-                  }}
-                >
-                  Ver Detalles
-                </button>
-                
-                <button
-                  onClick={resetScanner}
-                  className="text-sm px-4 py-2 text-gray-300 hover:text-gray-100 underline"
-                >
-                  Escanear Otra
-                </button>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-neutral-800 rounded-xl shadow-lg border border-red-500/50 p-6"
+          Limpiar
+        </button>
+        <button
+          onClick={handleClose}
+          className="btn-primary"
         >
-          <div className="flex items-center space-x-3">
-            <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-red-400 font-medium">Error</p>
-              <p className="text-gray-300 text-sm">{error}</p>
-            </div>
-            <button
-              onClick={() => setError('')}
-              className="text-red-400 hover:text-red-300"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Información adicional */}
-      <div className="bg-neutral-800/60 border border-neutral-600 rounded-lg p-4">
-        <h4 className="font-semibold text-blue-400 mb-2">Instrucciones</h4>
-        <ul className="text-sm text-gray-300 space-y-1 list-disc list-inside">
-          <li><strong>Código Manual:</strong> Ingresa el código exacto de la tarjeta (ej: MM123456789)</li>
-          <li><strong>Escáner QR:</strong> Permite acceso a la cámara para escanear el código QR de la tarjeta</li>
-          <li>Una vez encontrada la tarjeta, podrás ver todos sus detalles y gestionar el saldo</li>
-          <li>Asegúrate de que el código esté completo y sin espacios</li>
-          {hasCamera && (
-            <li className="text-green-400"><strong>Cámara detectada:</strong> Puedes usar el escáner QR real</li>
-          )}
-        </ul>
+          Cerrar
+        </button>
       </div>
     </div>
   )

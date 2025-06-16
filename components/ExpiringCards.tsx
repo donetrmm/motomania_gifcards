@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, Calendar, CreditCard, User, Clock } from 'lucide-react'
 import { GiftCard } from '@/types/giftcard'
-import { GiftCardService } from '@/lib/giftcard-service'
-import { deobfuscateCode } from '@/lib/auth'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
+import { DateUtils } from '@/lib/config'
 
 interface ExpiringCardsProps {
   onCardSelect: (card: GiftCard) => void
@@ -13,21 +13,25 @@ interface ExpiringCardsProps {
 
 export default function ExpiringCards({ onCardSelect }: ExpiringCardsProps) {
   const [expiringCards, setExpiringCards] = useState<GiftCard[]>([])
-  const service = GiftCardService.getInstance()
+  const [isLoading, setIsLoading] = useState(true)
+  const service = SupabaseGiftCardService.getInstance()
 
   useEffect(() => {
-    const loadExpiringCards = () => {
-      const cards = service.getExpiringGiftCards(7) // 7 días
-      // Tarjetas próximas a expirar cargadas
-      setExpiringCards(cards)
-    }
-
     loadExpiringCards()
-    
-    // Actualizar cada minuto
-    const interval = setInterval(loadExpiringCards, 60000)
-    return () => clearInterval(interval)
-  }, [service])
+  }, [])
+
+  const loadExpiringCards = async () => {
+    setIsLoading(true)
+    try {
+      const cards = await service.getExpiringGiftCardsAsync(7) // Próximas a expirar en 7 días
+      setExpiringCards(cards)
+    } catch (error) {
+      console.error('Error loading expiring cards:', error)
+      setExpiringCards([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const getDaysUntilExpiration = (expiresAt: Date) => {
     const now = new Date()
@@ -92,7 +96,8 @@ export default function ExpiringCards({ onCardSelect }: ExpiringCardsProps) {
 
         <div className="space-y-3">
           {expiringCards.map((card, index) => {
-            const daysLeft = getDaysUntilExpiration(card.expiresAt!)
+            const now = DateUtils.nowInMexico()
+            const daysLeft = card.expiresAt ? DateUtils.daysDifferenceInMexico(now, card.expiresAt) : 0
             const urgencyColor = getUrgencyColor(daysLeft)
 
             return (
@@ -131,18 +136,14 @@ export default function ExpiringCards({ onCardSelect }: ExpiringCardsProps) {
                         <div className="flex items-center space-x-2">
                           <CreditCard className="w-4 h-4 flex-shrink-0" />
                           <span className="font-mono text-sm font-semibold leading-tight mobile-crisp ultra-crisp" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {deobfuscateCode(card.code)}
+                            {service.deobfuscateCode(card.code)}
                           </span>
                         </div>
                         
                         <div className="flex items-center space-x-2">
                           <Calendar className="w-4 h-4 flex-shrink-0" />
                           <span className="text-sm font-semibold leading-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {card.expiresAt?.toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric'
-                            })}
+                            {card.expiresAt ? DateUtils.formatForDisplay(card.expiresAt) : 'Sin fecha'}
                           </span>
                         </div>
                       </div>

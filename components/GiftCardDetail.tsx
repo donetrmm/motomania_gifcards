@@ -20,8 +20,7 @@ import {
   ShoppingBag
 } from 'lucide-react'
 import { GiftCard, Transaction } from '@/types/giftcard'
-import { GiftCardService } from '@/lib/giftcard-service'
-import { deobfuscateCode } from '@/lib/auth'
+import { SupabaseGiftCardService } from '@/lib/supabase-giftcard-service'
 import GiftCardDesign from './GiftCardDesign'
 import MotomaniaLogo from './MotomaniaLogo'
 import html2canvas from 'html2canvas'
@@ -40,10 +39,12 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
   const [isAdjusting, setIsAdjusting] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('')
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loadingTransactions, setLoadingTransactions] = useState(false)
   
-  const service = GiftCardService.getInstance()
+  const service = SupabaseGiftCardService.getInstance()
   const cardRef = useRef<HTMLDivElement>(null)
-  const code = deobfuscateCode(giftCard.code)
+  const code = service.deobfuscateCode(giftCard.code)
 
   // Prevenir scroll del body y auto-scroll al modal
   useEffect(() => {
@@ -101,6 +102,26 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
     generateQR()
   }, [giftCard.id, code, giftCard.currentAmount])
 
+  // Cargar transacciones
+  const loadTransactions = async () => {
+    setLoadingTransactions(true)
+    try {
+      console.log('Loading transactions for gift card:', giftCard.id)
+      const txs = await service.getGiftCardTransactions(giftCard.id)
+      console.log('Loaded transactions:', txs)
+      setTransactions(txs)
+    } catch (error) {
+      console.error('Error loading transactions:', error)
+      setTransactions([])
+    } finally {
+      setLoadingTransactions(false)
+    }
+  }
+
+  useEffect(() => {
+    loadTransactions()
+  }, [giftCard.id])
+
   const handleAdjustAmount = async (type: 'add' | 'subtract') => {
     if (adjustAmount <= 0 || !adjustReason.trim()) return
 
@@ -111,7 +132,7 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
         ? giftCard.currentAmount + adjustAmount
         : Math.max(0, giftCard.currentAmount - adjustAmount)
 
-      const success = service.updateGiftCardAmount(
+      const success = await service.updateGiftCardAmount(
         giftCard.id, 
         newAmount, 
         `${type === 'add' ? 'Recarga' : 'Descuento'}: ${adjustReason}`
@@ -120,6 +141,8 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
       if (success) {
         setAdjustAmount(0)
         setAdjustReason('')
+        // Recargar transacciones
+        await loadTransactions()
         onUpdate()
       }
     } catch (error) {
@@ -133,13 +156,11 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
     setIsAdjusting(true)
     
     try {
-      const success = service.redeemGiftCard(
-        giftCard.id, 
-        giftCard.currentAmount, 
-        'Canje completo de la tarjeta'
-      )
+      const success = await service.redeemGiftCard(giftCard.id)
 
       if (success) {
+        // Recargar transacciones
+        await loadTransactions()
         onUpdate()
       }
     } catch (error) {
@@ -196,9 +217,6 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
   }
 
   const status = service.getGiftCardStatus(giftCard)
-  const transactions = giftCard.transactions.sort((a, b) => 
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  )
 
   return (
     <AnimatePresence>
@@ -277,7 +295,7 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
             <div className="flex overflow-x-auto scrollbar-hide px-4 sm:px-6">
               {[
                 { id: 'details', label: 'Detalles', icon: User },
-                { id: 'transactions', label: 'Transacciones', icon: History },
+                { id: 'transactions', label: `Transacciones (${transactions.length})`, icon: History },
                 { id: 'design', label: 'Diseño', icon: QrCode }
               ].map(({ id, label, icon: Icon }) => (
                 <button
@@ -291,7 +309,7 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                 >
                   <Icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{label}</span>
-                  <span className="sm:hidden">{label.split(' ')[0]}</span>
+                  <span className="sm:hidden">{id === 'transactions' ? `Trans. (${transactions.length})` : label.split(' ')[0]}</span>
                 </button>
               ))}
             </div>
@@ -449,7 +467,12 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                   Historial de Transacciones ({transactions.length})
                 </h3>
                 
-                {transactions.length === 0 ? (
+                {loadingTransactions ? (
+                  <div className="text-center py-8">
+                    <History className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-300">Cargando transacciones...</p>
+                  </div>
+                ) : transactions.length === 0 ? (
                   <div className="text-center py-8">
                     <History className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                     <p className="text-gray-300">No hay transacciones registradas</p>
@@ -478,7 +501,10 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
                               ${transaction.amount.toLocaleString()}
                             </p>
                             <p className="text-xs text-gray-400 capitalize">
-                              {transaction.type}
+                              {transaction.type === 'creation' && 'Creación'}
+                              {transaction.type === 'refund' && 'Abono'}
+                              {transaction.type === 'adjustment' && 'Uso/Descuento'}
+                              {transaction.type === 'usage' && 'Canje'}
                             </p>
                           </div>
                         </div>

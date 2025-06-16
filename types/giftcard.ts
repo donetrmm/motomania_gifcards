@@ -20,7 +20,7 @@ export interface GiftCard {
 export interface Transaction {
   id: string
   giftCardId: string
-  type: 'creation' | 'redemption' | 'refund' | 'adjustment'
+  type: 'creation' | 'usage' | 'refund' | 'adjustment'
   amount: number
   description: string
   timestamp: Date
