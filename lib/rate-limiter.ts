@@ -158,11 +158,11 @@ export class RateLimiter {
     const now = Date.now()
     const maxAge = Math.max(...Object.values(this.configs).map(c => c.windowMs + c.blockDurationMs))
 
-    for (const [key, entry] of this.attempts.entries()) {
+    Array.from(this.attempts.entries()).forEach(([key, entry]) => {
       if (now - entry.lastAttempt > maxAge) {
         this.attempts.delete(key)
       }
-    }
+    })
   }
 
   // Resetear límites para una acción específica (solo para emergencias)
@@ -175,7 +175,7 @@ export class RateLimiter {
   getStats(): Record<string, { totalAttempts: number; blockedAttempts: number }> {
     const stats: Record<string, { totalAttempts: number; blockedAttempts: number }> = {}
     
-    for (const [key, entry] of this.attempts.entries()) {
+    Array.from(this.attempts.entries()).forEach(([key, entry]) => {
       const [action] = key.split(':')
       const config = this.configs[action]
       
@@ -187,7 +187,7 @@ export class RateLimiter {
       if (config && entry.count > config.maxAttempts) {
         stats[action].blockedAttempts += entry.count - config.maxAttempts
       }
-    }
+    })
     
     return stats
   }

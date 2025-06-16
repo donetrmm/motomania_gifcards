@@ -86,7 +86,7 @@ export default function DeleteGiftCardModal({
           addToast({
             type: 'error',
             title: 'Error al desactivar',
-            description: 'No se pudo desactivar la tarjeta. Puede que ya esté inactiva.'
+            message: 'No se pudo desactivar la tarjeta. Puede que ya esté inactiva.'
           })
           setIsDeleting(false)
           return
@@ -95,7 +95,7 @@ export default function DeleteGiftCardModal({
         addToast({
           type: 'success',
           title: 'Tarjeta desactivada correctamente',
-          description: `La tarjeta de ${giftCard.ownerName} ha sido desactivada. Se puede reactivar más tarde.`
+                      message: `La tarjeta de ${giftCard.ownerName} ha sido desactivada. Se puede reactivar más tarde.`
         })
 
         onDeleted?.()
@@ -106,7 +106,7 @@ export default function DeleteGiftCardModal({
           addToast({
             type: 'error',
             title: 'Código incorrecto',
-            description: `Debe escribir exactamente: ${confirmationCodeNeeded}`
+            message: `Debe escribir exactamente: ${confirmationCodeNeeded}`
           })
           return
         }
@@ -117,7 +117,7 @@ export default function DeleteGiftCardModal({
           addToast({
             type: 'error',
             title: 'Error al eliminar',
-            description: result.error
+            message: result.error
           })
           return
         }
@@ -125,7 +125,7 @@ export default function DeleteGiftCardModal({
         addToast({
           type: 'success',
           title: 'Tarjeta eliminada',
-          description: `La tarjeta de ${giftCard.ownerName} ha sido eliminada permanentemente`
+                      message: `La tarjeta de ${giftCard.ownerName} ha sido eliminada permanentemente`
         })
 
         onDeleted?.()
@@ -135,7 +135,7 @@ export default function DeleteGiftCardModal({
       addToast({
         type: 'error',
         title: 'Error inesperado',
-        description: `Ocurrió un error al ${action === 'delete' ? 'eliminar' : 'desactivar'} la tarjeta`
+                    message: `Ocurrió un error al ${action === 'delete' ? 'eliminar' : 'desactivar'} la tarjeta`
       })
     } finally {
       setIsDeleting(false)

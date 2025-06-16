@@ -143,6 +143,11 @@ export default function ImportCards({ onImportSuccess }: ImportCardsProps) {
           notes: cardData.notes
         })
 
+        // Verificar que la creación fue exitosa
+        if (typeof newCard === 'object' && 'error' in newCard) {
+          throw new Error(newCard.error)
+        }
+
         // Si se especifica un código personalizado, actualizarlo
         if (cardData.code && cardData.code !== newCard.code) {
           newCard.code = cardData.code
