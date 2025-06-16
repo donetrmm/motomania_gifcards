@@ -110,7 +110,7 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="absolute right-3 top-1/3 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -145,22 +145,6 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
               )}
             </motion.button>
           </form>
-
-          {/* Información de credenciales solo en desarrollo */}
-          {process.env.NODE_ENV === 'development' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1, duration: 0.5 }}
-              className="mt-8 p-4 bg-neutral-700/50 rounded-lg border border-neutral-600"
-            >
-              <p className="text-xs text-gray-300 text-center">
-                <strong>Credenciales de prueba:</strong><br />
-                Usuario: motomania<br />
-                Contraseña: MotoMania2024!
-              </p>
-            </motion.div>
-          )}
         </div>
 
         {/* Efectos de fondo */}
