@@ -5,7 +5,7 @@ import { X, AlertTriangle, Power } from 'lucide-react'
 import { GiftCard } from '@/types/giftcard'
 import { GiftCardService } from '@/lib/giftcard-service'
 import { useToast } from '@/components/ui/Toast'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 
 interface DeleteGiftCardModalProps {
   isOpen: boolean
