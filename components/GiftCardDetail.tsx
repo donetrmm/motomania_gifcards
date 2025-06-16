@@ -224,8 +224,8 @@ export default function GiftCardDetail({ giftCard, onClose, onUpdate }: GiftCard
         setTimeout(() => {
           onClose()
         }, 1500)
-      } else if (typeof result === 'object' && result.error) {
-        console.error('Error redeeming card:', result.error)
+      } else {
+        console.error('Error redeeming card: Operation failed')
         // Aquí podrías mostrar un toast o alert con el error
       }
     } catch (error) {

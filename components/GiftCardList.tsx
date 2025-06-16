@@ -38,7 +38,7 @@ export default function GiftCardList({ giftCards, onCardSelect, onCardUpdate, on
   const handleQuickAction = async (card: GiftCard, action: 'deactivate' | 'reactivate') => {
     try {
       if (action === 'deactivate') {
-        const success = service.deactivateGiftCard(card.id)
+        const success = await service.deactivateGiftCard(card.id)
         if (!success) {
           console.error('Error deactivating card')
           return
@@ -50,9 +50,9 @@ export default function GiftCardList({ giftCards, onCardSelect, onCardUpdate, on
           return
         }
         
-        const result = service.updateGiftCard(card.id, { isActive: true })
-        if (typeof result === 'object' && result.error) {
-          console.error('Error reactivating card:', result.error)
+        const success = await service.updateGiftCard(card.id, { isActive: true })
+        if (!success) {
+          console.error('Error reactivating card')
           return
         }
       }
